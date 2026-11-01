@@ -1,6 +1,9 @@
-# Stage 6: Receipts (approved design, not yet implemented)
+# Stage 6: Receipts (approved design; implemented)
 
 Approved after the Stage 5 assessment. Builds on schema v5 (`d1efa22`).
+Implemented in Stage 6 as schema v6; the README describes the result. Deviations:
+expense matches use a ±7-day window, so recurring bills due later in the week are
+found. Backups (Argon2id) are prepared for, but not yet built.
 
 ## Decisions
 
@@ -73,7 +76,7 @@ Approved after the Stage 5 assessment. Builds on schema v5 (`d1efa22`).
 
 1. **Same image:** the SHA-256 of the image bytes blocks an exact duplicate. A perceptual hash warns about a re-photographed receipt.
 2. **Same receipt:** warn when the store, date and total match an existing receipt, or when the receipt number matches.
-3. **Expense already entered:** before creating an expense, look for one with the same amount within ±3 days, including SCHEDULED ones.
+3. **Expense already entered:** before creating an expense, look for one with the same amount within ±3 days (implemented: ±7), including SCHEDULED ones.
    - If there is a strong match, attach the receipt to it by default.
    - If the match is scheduled, use `confirm(id, actualAmount)`.
 4. **Safe retries:** the expense is created with request ID `receipt-<receiptId>`, and the unique `transaction_id` on receipts stops one expense from getting two receipts.

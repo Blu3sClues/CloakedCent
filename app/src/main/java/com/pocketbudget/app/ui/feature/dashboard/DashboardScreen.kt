@@ -1,6 +1,7 @@
 package com.pocketbudget.app.ui.feature.dashboard
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,6 +78,7 @@ class DashboardActions(
     val onOpenBudgets: () -> Unit = {},
     val onOpenRecurring: () -> Unit = {},
     val onOpenUpcoming: () -> Unit = {},
+    val onOpenReceipts: () -> Unit = {},
 )
 
 @Composable
@@ -90,6 +92,7 @@ fun DashboardRoute(
     onOpenBudgets: () -> Unit,
     onOpenRecurring: () -> Unit,
     onOpenUpcoming: () -> Unit,
+    onOpenReceipts: () -> Unit,
     viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -107,6 +110,7 @@ fun DashboardRoute(
             onOpenBudgets = onOpenBudgets,
             onOpenRecurring = onOpenRecurring,
             onOpenUpcoming = onOpenUpcoming,
+            onOpenReceipts = onOpenReceipts,
         ),
     )
 }
@@ -164,7 +168,13 @@ private const val DASHBOARD_BUDGETS = 3
 
 @Composable
 private fun PlanningShortcuts(overdueCount: Int, actions: DashboardActions) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Scrolls sideways on narrow screens instead of squeezing the labels.
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AssistChip(
+            onClick = actions.onOpenReceipts,
+            label = { Text(stringResource(R.string.receipts_title)) },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_receipt), null) },
+        )
         AssistChip(onClick = actions.onOpenBudgets, label = { Text(stringResource(R.string.budgets_title)) })
         AssistChip(onClick = actions.onOpenRecurring, label = { Text(stringResource(R.string.recurring_title)) })
         AssistChip(

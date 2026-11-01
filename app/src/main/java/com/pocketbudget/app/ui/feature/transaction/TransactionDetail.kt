@@ -42,6 +42,7 @@ import com.pocketbudget.app.domain.model.TransactionDetail
 import com.pocketbudget.app.domain.model.TransactionRevision
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
+import com.pocketbudget.app.domain.repository.ReceiptRepository
 import com.pocketbudget.app.domain.repository.TransactionRepository
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -62,6 +63,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.ZoneId
@@ -77,11 +79,16 @@ sealed interface DetailState {
 class TransactionDetailViewModel(
     private val id: Long,
     private val transactions: TransactionRepository,
+    receipts: ReceiptRepository? = null,
 ) : ViewModel() {
 
     val state: StateFlow<DetailState> = transactions.observeDetail(id)
         .map { it?.let(DetailState::Loaded) ?: DetailState.Missing }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailState.Loading)
+
+    /** The receipt attached to this expense, if any. */
+    val receiptId: StateFlow<Long?> = (receipts?.observeReceiptFor(id) ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _error = MutableStateFlow<Int?>(null)
     val error: StateFlow<Int?> = _error.asStateFlow()
@@ -109,6 +116,7 @@ class TransactionDetailViewModel(
                 TransactionDetailViewModel(
                     id = createSavedStateHandle().get<Long>(TransactionEditorViewModel.ARG_TRANSACTION_ID) ?: 0L,
                     transactions = (this[APPLICATION_KEY] as PocketBudgetApp).container.transactionRepository,
+                    receipts = (this[APPLICATION_KEY] as PocketBudgetApp).container.receiptRepository,
                 )
             }
         }
@@ -119,11 +127,13 @@ class TransactionDetailViewModel(
 fun TransactionDetailRoute(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
+    onOpenReceipt: (Long) -> Unit = {},
     viewModel: TransactionDetailViewModel = viewModel(factory = TransactionDetailViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
-    TransactionDetailScreen(state, error, onBack, onEdit, viewModel::markCompleted, viewModel::delete)
+    val receiptId by viewModel.receiptId.collectAsStateWithLifecycle()
+    TransactionDetailScreen(state, error, onBack, onEdit, viewModel::markCompleted, viewModel::delete, receiptId, onOpenReceipt)
 }
 
 @Composable
@@ -134,6 +144,8 @@ fun TransactionDetailScreen(
     onEdit: (Long) -> Unit,
     onMarkCompleted: (Money?) -> Unit,
     onDelete: () -> Unit,
+    receiptId: Long? = null,
+    onOpenReceipt: (Long) -> Unit = {},
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmAmount by remember { mutableStateOf<String?>(null) }
@@ -159,6 +171,11 @@ fun TransactionDetailScreen(
                 is DetailState.Loaded -> {
                     SummaryCard(state.detail)
                     error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
+                    receiptId?.let { id ->
+                        OutlinedButton(onClick = { onOpenReceipt(id) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.receipt_view))
+                        }
+                    }
                     if (!state.detail.isDeleted) {
                         if (state.detail.status.isScheduled) {
                             Button({ confirmAmount = AmountInput.format(state.detail.amount.abs()) }, Modifier.fillMaxWidth()) {

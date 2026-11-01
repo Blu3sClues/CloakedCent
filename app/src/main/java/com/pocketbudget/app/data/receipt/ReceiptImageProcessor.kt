@@ -7,7 +7,10 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
 import android.graphics.Paint
-import android.media.ExifInterface
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.get
+import androidx.core.graphics.scale
+import androidx.exifinterface.media.ExifInterface
 import com.pocketbudget.app.domain.model.PageInput
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -83,6 +86,24 @@ object ReceiptImageProcessor {
         return enhance(bitmap)
     }
 
+    /** Small upright copy of an unsaved photo for the capture screen; crop fractions refer to it. */
+    fun preview(bytes: ByteArray, maxLongSide: Int): Bitmap {
+        val decoded = decode(bytes, maxLongSide) ?: throw ReceiptImageException("This file is not a supported image")
+        return transform(decoded, orientationMatrix(bytes, 0))
+    }
+
+    /** Whether the photo already carries an EXIF rotation, so a camera's own rotation must not be added again. */
+    fun hasExifRotation(bytes: ByteArray): Boolean = try {
+        ExifInterface(ByteArrayInputStream(bytes)).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL) !in
+            setOf(ExifInterface.ORIENTATION_NORMAL, ExifInterface.ORIENTATION_UNDEFINED)
+    } catch (_: IOException) {
+        false
+    }
+
+    /** [bitmap] turned clockwise by [degrees] (a multiple of 90). */
+    fun rotate(bitmap: Bitmap, degrees: Int): Bitmap =
+        transform(bitmap, Matrix().apply { if (degrees % 360 != 0) postRotate(degrees.toFloat()) })
+
     fun decode(jpeg: ByteArray, maxLongSide: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, bounds)
@@ -122,24 +143,19 @@ object ReceiptImageProcessor {
         val longSide = max(bitmap.width, bitmap.height)
         if (longSide <= maxLongSide) return bitmap
         val ratio = maxLongSide.toFloat() / longSide
-        return Bitmap.createScaledBitmap(
-            bitmap,
-            (bitmap.width * ratio).roundToInt().coerceAtLeast(1),
-            (bitmap.height * ratio).roundToInt().coerceAtLeast(1),
-            true,
-        )
+        return bitmap.scale((bitmap.width * ratio).roundToInt().coerceAtLeast(1), (bitmap.height * ratio).roundToInt().coerceAtLeast(1))
     }
 
     /** Grayscale, then stretch the 1st-99th percentile of brightness to full range. */
     private fun enhance(source: Bitmap): Bitmap {
-        val gray = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
+        val gray = createBitmap(source.width, source.height)
         Canvas(gray).drawBitmap(
             source,
             0f,
             0f,
             Paint().apply { colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) }) },
         )
-        val sample = Bitmap.createScaledBitmap(gray, 64, max(1, 64 * gray.height / max(1, gray.width)), true)
+        val sample = gray.scale(64, max(1, 64 * gray.height / max(1, gray.width)))
         val histogram = IntArray(256)
         val pixels = IntArray(sample.width * sample.height)
         sample.getPixels(pixels, 0, sample.width, 0, 0, sample.width, sample.height)
@@ -156,7 +172,7 @@ object ReceiptImageProcessor {
                 0f, 0f, 0f, 1f, 0f,
             ),
         )
-        val result = Bitmap.createBitmap(gray.width, gray.height, Bitmap.Config.ARGB_8888)
+        val result = createBitmap(gray.width, gray.height)
         Canvas(result).drawBitmap(gray, 0f, 0f, Paint().apply { colorFilter = ColorMatrixColorFilter(stretch) })
         return result
     }
@@ -173,11 +189,11 @@ object ReceiptImageProcessor {
 
     /** 64-bit dHash: brightness gradients of a 9x8 thumbnail, robust to re-compression and small shifts. */
     fun differenceHash(bitmap: Bitmap): Long {
-        val small = Bitmap.createScaledBitmap(bitmap, 9, 8, true)
+        val small = bitmap.scale(9, 8)
         var hash = 0L
         for (y in 0 until 8) {
             for (x in 0 until 8) {
-                hash = (hash shl 1) or (if (luma(small.getPixel(x, y)) > luma(small.getPixel(x + 1, y))) 1L else 0L)
+                hash = (hash shl 1) or (if (luma(small[x, y]) > luma(small[x + 1, y])) 1L else 0L)
             }
         }
         return hash

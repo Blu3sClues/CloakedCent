@@ -18,6 +18,13 @@ import com.pocketbudget.app.ui.feature.budget.ARG_BUDGET_ID
 import com.pocketbudget.app.ui.feature.budget.BudgetDetailRoute
 import com.pocketbudget.app.ui.feature.budget.BudgetEditorRoute
 import com.pocketbudget.app.ui.feature.budget.BudgetsRoute
+import com.pocketbudget.app.ui.feature.receipt.ARG_PRODUCT_ID
+import com.pocketbudget.app.ui.feature.receipt.ARG_RECEIPT_ID
+import com.pocketbudget.app.ui.feature.receipt.ProductRoute
+import com.pocketbudget.app.ui.feature.receipt.ProductsRoute
+import com.pocketbudget.app.ui.feature.receipt.ReceiptCaptureRoute
+import com.pocketbudget.app.ui.feature.receipt.ReceiptReviewRoute
+import com.pocketbudget.app.ui.feature.receipt.ReceiptsRoute
 import com.pocketbudget.app.ui.feature.recurring.ARG_SCHEDULE_ID
 import com.pocketbudget.app.ui.feature.recurring.RecurringDetailRoute
 import com.pocketbudget.app.ui.feature.recurring.RecurringEditorRoute
@@ -37,6 +44,14 @@ private object Routes {
     const val SCHEDULE = "recurring/{$ARG_SCHEDULE_ID}"
     const val SCHEDULE_EDIT = "recurring-edit?$ARG_SCHEDULE_ID={$ARG_SCHEDULE_ID}"
     const val UPCOMING = "upcoming"
+    const val RECEIPTS = "receipts"
+    const val RECEIPT_CAPTURE = "receipt-capture"
+    const val RECEIPT = "receipt/{$ARG_RECEIPT_ID}"
+    const val PRODUCTS = "products"
+    const val PRODUCT = "product/{$ARG_PRODUCT_ID}"
+
+    fun receipt(id: Long) = "receipt/$id"
+    fun product(id: Long) = "product/$id"
 
     fun budget(id: Long) = "budget/$id"
     fun budgetEdit(id: Long?) = "budget-edit?$ARG_BUDGET_ID=${id ?: -1}"
@@ -77,8 +92,34 @@ fun PocketBudgetNavHost() {
                 onOpenBudgets = { nav.navigate(Routes.BUDGETS) },
                 onOpenRecurring = { nav.navigate(Routes.RECURRING) },
                 onOpenUpcoming = { nav.navigate(Routes.UPCOMING) },
+                onOpenReceipts = { nav.navigate(Routes.RECEIPTS) },
             )
         }
+        composable(Routes.RECEIPTS) {
+            ReceiptsRoute(
+                onBack = back,
+                onScan = { nav.navigate(Routes.RECEIPT_CAPTURE) },
+                onOpen = { nav.navigate(Routes.receipt(it)) },
+                onProducts = { nav.navigate(Routes.PRODUCTS) },
+            )
+        }
+        composable(Routes.RECEIPT_CAPTURE) {
+            ReceiptCaptureRoute(
+                onBack = back,
+                // The capture screen is done once its pages are stored; Back from review returns to the list.
+                onCreated = { id -> nav.navigate(Routes.receipt(id)) { popUpTo(Routes.RECEIPT_CAPTURE) { inclusive = true } } },
+                onOpenExisting = { id -> nav.navigate(Routes.receipt(id)) { popUpTo(Routes.RECEIPT_CAPTURE) { inclusive = true } } },
+            )
+        }
+        composable(Routes.RECEIPT, listOf(navArgument(ARG_RECEIPT_ID) { type = NavType.LongType })) {
+            ReceiptReviewRoute(
+                onBack = back,
+                onOpenReceipt = { nav.navigate(Routes.receipt(it)) },
+                onOpenTransaction = { nav.navigate(Routes.transaction(it)) },
+            )
+        }
+        composable(Routes.PRODUCTS) { ProductsRoute(onBack = back, onOpen = { nav.navigate(Routes.product(it)) }) }
+        composable(Routes.PRODUCT, listOf(navArgument(ARG_PRODUCT_ID) { type = NavType.LongType })) { ProductRoute(onBack = back) }
         composable(Routes.ACCOUNT, listOf(optionalId(AccountEditorViewModel.ARG_ACCOUNT_ID))) {
             AccountEditorRoute(
                 onDone = back,
@@ -128,7 +169,11 @@ fun PocketBudgetNavHost() {
             ),
         ) { TransactionEditorRoute(onDone = back) }
         composable(Routes.TRANSACTION, listOf(requiredId)) {
-            TransactionDetailRoute(onBack = back, onEdit = { nav.navigate(Routes.editTransaction(it)) })
+            TransactionDetailRoute(
+                onBack = back,
+                onEdit = { nav.navigate(Routes.editTransaction(it)) },
+                onOpenReceipt = { nav.navigate(Routes.receipt(it)) },
+            )
         }
         composable(Routes.EDIT_TRANSACTION, listOf(requiredId)) { TransactionEditorRoute(onDone = back) }
     }

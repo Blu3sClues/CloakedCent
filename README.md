@@ -77,6 +77,7 @@ app/src/main/java/com/pocketbudget/app/
 ├── core/money/               Money: exact whole-cent arithmetic
 ├── data/
 │   ├── db/                   Room database, entities, DAOs, migrations, factory
+│   ├── receipt/              Image processing, encrypted image store, Tesseract OCR
 │   ├── security/             Database key generation and Keystore wrapping
 │   └── repository/           Repository implementations
 ├── domain/
@@ -129,8 +130,18 @@ No key is hardcoded, and no key material is logged or included in exception mess
   `data_extraction_rules.xml` exclude all data from Google cloud backup and
   device-to-device transfer.
 - Release builds strip verbose, debug and info logging (`proguard-rules.pro`).
-- Receipt images (future) will be stored in app-internal storage only. They will
-  not go in shared storage and will not be exposed through an exported provider.
+- **Receipt images** are re-encoded on import, which removes EXIF metadata (location,
+  device, time). Each page is stored as an AES-256-GCM file in `noBackupFilesDir/receipts`.
+  The file name and format version are authenticated with the data. The random media key
+  lives only inside the SQLCipher database (`app_metadata`). Decrypted images exist only
+  in memory. There is no shared storage and no exported provider. Files left by an
+  interrupted import or a discard are removed by the background job.
+- **OCR** runs entirely on the device: Tesseract 5.5.1 through Tesseract4Android 4.9.0
+  (Apache-2.0), with the English `tessdata_fast` model bundled in the APK. The SHA-256
+  of the model is checked before use, and the build checks the SHA-256 of the AAR.
+- **Camera and location** permissions are requested only when used. Photos can be
+  picked without any permission. Location is a single fix, taken only when the user
+  taps *Use current location*, and is never needed for scanning.
 
 ---
 
@@ -212,6 +223,41 @@ so every balance comes from a single source and nothing can be double counted.
   alerts. Notifications need `POST_NOTIFICATIONS` on Android 13+ (requested in
   context) and hide names and amounts on the lock screen. Dates are local
   calendar dates evaluated at run time, so time zone changes are handled.
+
+### Receipts and purchase history (schema v6)
+
+- **Workflow.** Capture pages with CameraX or the photo picker (multi-page; crop,
+  rotate and enhance per page). The pages are stored encrypted, and OCR then fills
+  in a *draft*. The user reviews and corrects it, then confirms or discards it.
+  Low-confidence lines and values are highlighted on the image and in the form.
+  Nothing affects balances or budgets until confirmation.
+- **Accounting.** Confirming creates a new expense through the normal ledger, or
+  attaches the receipt to an existing one. Possible matches (same amount, or
+  scheduled/recurring entries within ±7 days) are only suggested; the user always
+  chooses. A scheduled match is confirmed with the receipt total. A completed
+  expense with a different amount changes only if the user allows it, and the
+  change is recorded as an audited revision. Each expense can have only one
+  receipt, enforced by a unique index. Confirmation is atomic and idempotent
+  (request id `receipt-<id>`).
+- **Reconciliation.** Items after their discounts, minus receipt-level discounts,
+  plus tax must equal the total exactly, in integer cents. Otherwise confirmation
+  is refused.
+- **Category splits.** `transaction_splits` divides the expense by item category.
+  Tax and discounts are shared proportionally, using the largest-remainder method
+  so the parts add up exactly. Budgets count a split expense once, through its
+  splits; ordinary expenses are unchanged. Triggers keep splits within the
+  expense and fix its amount once split.
+- **Duplicates.** An identical image (SHA-256 of the imported file) is refused
+  unless the user chooses to import it anyway. A visually similar photo
+  (difference hash) or a receipt with the same store, date and total, or the same
+  receipt number, triggers a warning.
+- **Products and prices.** Confirmed items create or update products (pack size
+  taken from the name when printed, e.g. "1L"). They also teach store-specific
+  aliases: the store's receipt wording is mapped to the product the user chose,
+  and the alias is suggested on the next receipt. `price_observations` (append-only)
+  records each confirmed item with a normalized unit price per kg, litre or item.
+  The price is in thousandths of a cent, calculated with exact integer
+  arithmetic; lb, g and ml are converted. This is the data for Stage 7 price alerts.
 
 - **Amounts in forms** are typed freely and shown as currency (e.g. `$38.00`)
   when the field loses focus; `AmountInput` parses locale grouping/decimal

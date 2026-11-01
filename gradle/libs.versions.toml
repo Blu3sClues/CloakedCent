@@ -36,6 +36,8 @@ lifecycle = "2.10.0"
 navigation = "2.9.8"
 work = "2.12.0"
 camerax = "1.6.2"
+# Already brought in by CameraX; declared because receipt processing uses it directly.
+exifinterface = "1.4.2"
 tesseract4android = "4.9.0"
 coroutines = "1.11.0"
 kotlinxSerialization = "1.8.1"
@@ -54,6 +56,7 @@ androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", ve
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 androidx-camera-compose = { group = "androidx.camera", name = "camera-compose", version.ref = "camerax" }
+androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 tesseract4android = { group = "cz.adaptech.tesseract4android", name = "tesseract4android", version.ref = "tesseract4android" }
 
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }

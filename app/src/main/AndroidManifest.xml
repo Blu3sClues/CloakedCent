@@ -16,6 +16,22 @@
     <!-- Local reminders for upcoming payments and budget alerts (requested in context on Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- In-app receipt photos (requested when the camera is opened). Photos can also be picked without it. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+    <!--
+        Optional, one-time store location, requested only when the user taps
+        "Use current location". Never needed for scanning; no background access.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
+
     <!--
         allowBackup / fullBackupContent / dataExtractionRules keep financial
         data, receipts and the wrapped database key out of Google cloud backup
