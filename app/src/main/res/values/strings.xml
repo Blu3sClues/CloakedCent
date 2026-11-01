@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">Pocket Budget</string>
+
+    <string name="home_welcome_title">Your budget, on your device</string>
+    <string name="home_welcome_body">Pocket Budget works completely offline. Your financial records never leave this phone.</string>
+
+    <string name="home_storage_title">Private storage</string>
+    <string name="home_storage_encrypted">Database encrypted with SQLCipher (%1$s)</string>
+    <string name="home_storage_key">Encryption key protected by Android Keystore</string>
+    <string name="home_storage_offline">No internet permission, no accounts, no tracking</string>
+    <string name="home_storage_created">Created %1$s</string>
+    <string name="home_storage_loading">Opening encrypted storage…</string>
+
+    <string name="home_error_title">Your data could not be opened</string>
+    <string name="home_error_key_missing">The encryption key for your existing data is missing. Your data has not been deleted.</string>
+    <string name="home_error_key_corrupted">The stored encryption key is damaged. Your data has not been deleted.</string>
+    <string name="home_error_keystore">Android Keystore is unavailable right now. Your data has not been deleted.</string>
+    <string name="home_error_unknown">An unexpected storage error occurred. Your data has not been deleted.</string>
+    <string name="home_error_retry">Try again</string>
+</resources>
