@@ -15,7 +15,9 @@ import com.pocketbudget.app.domain.model.PayeeType
 import com.pocketbudget.app.domain.model.PeriodSummary
 import com.pocketbudget.app.domain.model.TransactionEdit
 import com.pocketbudget.app.domain.model.TransactionListItem
+import com.pocketbudget.app.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalDate
 
 // All write methods throw LedgerException for rule violations and are atomic:
@@ -52,6 +54,11 @@ interface CategoryRepository {
     fun observeAll(): Flow<List<Category>>
 }
 
+interface SettingsRepository {
+    val themeMode: StateFlow<ThemeMode>
+    fun setThemeMode(mode: ThemeMode)
+}
+
 interface PayeeRepository {
     /** Returns the existing payee with this name (case-insensitive) or creates it. */
     suspend fun getOrCreate(name: String, type: PayeeType = PayeeType.MERCHANT): Long
@@ -72,11 +79,8 @@ interface TransactionRepository {
     /** Soft-deletes an entry (both legs for transfers), keeping it in history. */
     suspend fun delete(id: Long)
 
-    /** SCHEDULED -> PENDING. Returns false if already processed, so repeats are harmless. */
+    /** SCHEDULED -> SPENT (both legs for transfers). Returns false if already spent, so repeats are harmless. */
     suspend fun confirm(id: Long): Boolean
-
-    /** PENDING -> CLEARED. Returns false if not pending. */
-    suspend fun markCleared(id: Long): Boolean
 
     /** Most recent entries; transfers appear once (outgoing leg). */
     fun observeRecent(limit: Int): Flow<List<TransactionListItem>>

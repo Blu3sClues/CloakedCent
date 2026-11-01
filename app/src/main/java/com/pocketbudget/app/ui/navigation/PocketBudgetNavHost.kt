@@ -12,12 +12,14 @@ import com.pocketbudget.app.ui.feature.account.AccountEditorViewModel
 import com.pocketbudget.app.ui.feature.dashboard.DashboardRoute
 import com.pocketbudget.app.ui.feature.history.HistoryRoute
 import com.pocketbudget.app.ui.feature.history.HistoryViewModel
+import com.pocketbudget.app.ui.feature.settings.SettingsRoute
 import com.pocketbudget.app.ui.feature.transaction.TransactionDetailRoute
 import com.pocketbudget.app.ui.feature.transaction.TransactionEditorRoute
 import com.pocketbudget.app.ui.feature.transaction.TransactionEditorViewModel
 
 private object Routes {
     const val DASHBOARD = "dashboard"
+    const val SETTINGS = "settings"
     const val ACCOUNT = "account?${AccountEditorViewModel.ARG_ACCOUNT_ID}={${AccountEditorViewModel.ARG_ACCOUNT_ID}}"
     const val HISTORY = "history?${HistoryViewModel.ARG_ACCOUNT_ID}={${HistoryViewModel.ARG_ACCOUNT_ID}}"
     const val NEW_TRANSACTION = "transaction/new?${TransactionEditorViewModel.ARG_TYPE}={${TransactionEditorViewModel.ARG_TYPE}}"
@@ -43,18 +45,27 @@ fun PocketBudgetNavHost() {
             DashboardRoute(
                 onAddTransaction = { nav.navigate(Routes.newTransaction(it)) },
                 onAddAccount = { nav.navigate(Routes.account(null)) },
-                onOpenAccount = { nav.navigate(Routes.account(it)) },
+                onOpenAccount = { nav.navigate(Routes.history(it)) },
                 onOpenTransaction = { nav.navigate(Routes.transaction(it)) },
                 onOpenHistory = { nav.navigate(Routes.history(null)) },
+                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
             )
         }
-        composable(Routes.ACCOUNT, listOf(optionalId(AccountEditorViewModel.ARG_ACCOUNT_ID))) { entry ->
-            val id = entry.arguments?.getLong(AccountEditorViewModel.ARG_ACCOUNT_ID)?.takeIf { it > 0 }
-            AccountEditorRoute(onDone = back, onViewTransactions = { nav.navigate(Routes.history(it)) }, accountId = id)
+        composable(Routes.ACCOUNT, listOf(optionalId(AccountEditorViewModel.ARG_ACCOUNT_ID))) {
+            AccountEditorRoute(
+                onDone = back,
+                // The archived account's history screen is no longer meaningful.
+                onArchived = { nav.popBackStack(Routes.DASHBOARD, inclusive = false) },
+            )
         }
         composable(Routes.HISTORY, listOf(optionalId(HistoryViewModel.ARG_ACCOUNT_ID))) {
-            HistoryRoute(onBack = back, onOpen = { nav.navigate(Routes.transaction(it)) })
+            HistoryRoute(
+                onBack = back,
+                onOpen = { nav.navigate(Routes.transaction(it)) },
+                onEditAccount = { nav.navigate(Routes.account(it)) },
+            )
         }
+        composable(Routes.SETTINGS) { SettingsRoute(onBack = back) }
         composable(
             Routes.NEW_TRANSACTION,
             listOf(

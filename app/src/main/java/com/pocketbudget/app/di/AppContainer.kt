@@ -14,6 +14,8 @@ import com.pocketbudget.app.dev.SampleData
 import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.domain.repository.CategoryRepository
 import com.pocketbudget.app.domain.repository.PayeeRepository
+import com.pocketbudget.app.data.settings.SharedPreferencesSettingsRepository
+import com.pocketbudget.app.domain.repository.SettingsRepository
 import com.pocketbudget.app.domain.repository.StorageRepository
 import com.pocketbudget.app.domain.repository.TransactionRepository
 import java.io.File
@@ -50,6 +52,8 @@ class AppContainer(context: Context) {
     val categoryRepository: CategoryRepository by lazy { RoomCategoryRepository({ database }) }
     val payeeRepository: PayeeRepository by lazy { RoomPayeeRepository({ database }) }
     val transactionRepository: TransactionRepository by lazy { RoomTransactionRepository({ database }) }
+
+    val settingsRepository: SettingsRepository by lazy { SharedPreferencesSettingsRepository(appContext) }
 
     /** Debug builds only (see src/debug); null in release. */
     val sampleSeeder: (suspend () -> Unit)? = SampleData.seeder(this)

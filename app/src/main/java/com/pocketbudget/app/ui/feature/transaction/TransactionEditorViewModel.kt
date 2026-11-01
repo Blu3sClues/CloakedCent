@@ -50,7 +50,7 @@ data class TransactionEditorState(
     val categoryId: Long? = null,
     val payee: String = "",
     val note: String = "",
-    val status: TransactionStatus = TransactionStatus.PENDING,
+    val status: TransactionStatus = TransactionStatus.SPENT,
     val amountInvalid: Boolean = false,
     val accountMissing: Boolean = false,
     val toAccountMissing: Boolean = false,

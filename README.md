@@ -174,10 +174,18 @@ The `app_metadata` table is reserved for backup and installation metadata.
 Income and expenses are entry *types* in one ledger rather than separate tables,
 so every balance comes from a single source and nothing can be double counted.
 
-- **Status:** `SCHEDULED` (projected, money has not moved) → `PENDING`
-  (confirmed) → `CLEARED` (matches the bank). Balances are reported as
-  *current* (pending + cleared), *cleared*, and *projected* (current + scheduled).
-  Scheduled entries never appear in current balances or monthly income/spending.
+- **Status:** `SPENT` (the default: money has moved; used for income too) or
+  `SCHEDULED` (planned, money has not moved). Balances are reported as
+  *current* (spent only) and *projected* (current + scheduled). Scheduled entries
+  never appear in current balances or monthly income/spending. "Mark as spent"
+  converts SCHEDULED → SPENT exactly once (both legs for transfers) and records
+  the change in the audit history. Schema v3 migrated the former `PENDING` and
+  `CLEARED` statuses to `SPENT`.
+- **Amounts in forms** are typed freely and shown as currency (e.g. `$38.00`)
+  when the field loses focus; `AmountInput` parses locale grouping/decimal
+  separators to exact cents.
+- **Theme:** Light / Dark / System, stored in app-private SharedPreferences
+  (no financial data) and applied app-wide immediately.
 - **Transfers** are never counted as income or expense.
 - **No duplicate processing:** every income, expense and transfer carries a
   unique `request_id`. Repeating a request returns the original record, and

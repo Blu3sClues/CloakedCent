@@ -30,7 +30,7 @@ import com.pocketbudget.app.data.db.entity.TransferEntity
         TransactionEntity::class,
         TransactionRevisionEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

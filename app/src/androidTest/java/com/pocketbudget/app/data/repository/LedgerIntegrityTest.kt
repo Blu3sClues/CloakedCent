@@ -28,14 +28,29 @@ class LedgerIntegrityTest {
 
     private val epochDay = LocalDate.of(2026, 11, 15).toEpochDay()
 
-    private fun rawInsert(accountId: Long, type: String, cents: Long, transferId: Long? = null) = t.execSql(
+    private fun rawInsert(
+        accountId: Long,
+        type: String,
+        cents: Long,
+        transferId: Long? = null,
+        status: String = "SPENT",
+    ) = t.execSql(
         """
         INSERT INTO transactions (account_id, type, amount_cents, status, occurred_on, transfer_id,
             revision, is_deleted, created_at, updated_at)
-        VALUES (?, ?, ?, 'PENDING', ?, ?, 1, 0, 0, 0)
+        VALUES (?, ?, ?, ?, ?, ?, 1, 0, 0, 0)
         """,
-        accountId, type, cents, epochDay, transferId,
+        accountId, type, cents, status, epochDay, transferId,
     )
+
+    @Test
+    fun retiredStatusesAreRejected() = runTest {
+        val a = t.accounts.create("A", AccountType.CASH)
+        rawInsert(a, "INCOME", 100) // SPENT is accepted
+        listOf("PENDING", "CLEARED", "BOGUS").forEach { status ->
+            assertThrows(status, SQLiteException::class.java) { rawInsert(a, "INCOME", 100, status = status) }
+        }
+    }
 
     @Test
     fun foreignKeysRejectOrphanedEntries() = runTest {

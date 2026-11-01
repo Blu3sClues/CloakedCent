@@ -85,7 +85,8 @@ data class HistoryState(
 /** Holds the filter; searching itself is done by [TransactionRepository.search]. */
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class HistoryViewModel(
-    initialAccountId: Long?,
+    /** Set when opened from an account: the screen becomes that account's history. */
+    val accountId: Long?,
     transactions: TransactionRepository,
     accounts: AccountRepository,
     categories: CategoryRepository,
@@ -96,7 +97,7 @@ class HistoryViewModel(
     /** Kept separate so typing is never delayed by the search. */
     val query: StateFlow<String> = _query.asStateFlow()
 
-    private val criteria = MutableStateFlow(TransactionFilter(accountId = initialAccountId))
+    private val criteria = MutableStateFlow(TransactionFilter(accountId = accountId))
 
     private val filter = combine(criteria, _query.debounce(QUERY_DEBOUNCE_MS)) { c, q ->
         c.copy(query = q.trim().ifEmpty { null })
@@ -117,7 +118,7 @@ class HistoryViewModel(
             categories = categoryList.map { it.id to labels.getValue(it.id) }.sortedBy { it.second },
             payees = payeeList.map { it.id to it.name },
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryState(TransactionFilter(accountId = initialAccountId)))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryState(TransactionFilter(accountId = accountId)))
 
     fun onQueryChange(text: String) {
         _query.value = text
@@ -142,7 +143,7 @@ class HistoryViewModel(
             initializer {
                 val container = (this[APPLICATION_KEY] as PocketBudgetApp).container
                 HistoryViewModel(
-                    initialAccountId = createSavedStateHandle().get<Long>(ARG_ACCOUNT_ID)?.takeIf { it > 0 },
+                    accountId = createSavedStateHandle().get<Long>(ARG_ACCOUNT_ID)?.takeIf { it > 0 },
                     transactions = container.transactionRepository,
                     accounts = container.accountRepository,
                     categories = container.categoryRepository,
@@ -157,13 +158,18 @@ class HistoryViewModel(
 fun HistoryRoute(
     onBack: () -> Unit,
     onOpen: (Long) -> Unit,
+    onEditAccount: (Long) -> Unit,
     viewModel: HistoryViewModel = viewModel(factory = HistoryViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
+    val accountId = viewModel.accountId
     HistoryScreen(
         state = state,
         query = query,
+        title = accountId?.let { id -> state.accounts.firstOrNull { it.first == id }?.second }
+            ?: stringResource(R.string.history_title),
+        onEditAccount = accountId?.let { id -> { onEditAccount(id) } },
         onBack = onBack,
         onOpen = onOpen,
         onQueryChange = viewModel::onQueryChange,
@@ -179,6 +185,8 @@ fun HistoryRoute(
 fun HistoryScreen(
     state: HistoryState,
     query: String,
+    title: String,
+    onEditAccount: (() -> Unit)?,
     onBack: () -> Unit,
     onOpen: (Long) -> Unit,
     onQueryChange: (String) -> Unit,
@@ -188,7 +196,17 @@ fun HistoryScreen(
     onDates: (LocalDate?, LocalDate?) -> Unit,
     onClear: () -> Unit,
 ) {
-    Scaffold(topBar = { BackTopBar(stringResource(R.string.history_title), onBack) }) { padding ->
+    Scaffold(
+        topBar = {
+            BackTopBar(title, onBack) {
+                if (onEditAccount != null) {
+                    IconButton(onClick = onEditAccount) {
+                        Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.action_edit_account))
+                    }
+                }
+            }
+        },
+    ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 OutlinedTextField(

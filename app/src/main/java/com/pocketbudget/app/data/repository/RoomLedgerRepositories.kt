@@ -129,7 +129,6 @@ internal fun AccountBalanceRow.toDomain(): AccountBalance {
             includeInTotals = account.includeInTotals,
         ),
         current = opening + Money(currentCents),
-        cleared = opening + Money(clearedCents),
         projected = opening + Money(projectedCents),
     )
 }
@@ -304,10 +303,7 @@ class RoomTransactionRepository(
     }
 
     override suspend fun confirm(id: Long): Boolean =
-        transition(id, from = TransactionStatus.SCHEDULED, to = TransactionStatus.PENDING)
-
-    override suspend fun markCleared(id: Long): Boolean =
-        transition(id, from = TransactionStatus.PENDING, to = TransactionStatus.CLEARED)
+        transition(id, from = TransactionStatus.SCHEDULED, to = TransactionStatus.SPENT)
 
     override fun observeRecent(limit: Int): Flow<List<TransactionListItem>> =
         observe { it.transactionDao().observeRecent(limit) }.map { rows -> rows.map { it.toItem() } }

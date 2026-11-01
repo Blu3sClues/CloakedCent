@@ -23,7 +23,6 @@ import java.time.LocalDate
 data class AccountBalanceRow(
     @Embedded val account: AccountEntity,
     @ColumnInfo(name = "current_cents") val currentCents: Long,
-    @ColumnInfo(name = "cleared_cents") val clearedCents: Long,
     @ColumnInfo(name = "projected_cents") val projectedCents: Long,
 )
 
@@ -46,8 +45,7 @@ data class TransactionListRow(
 
 private const val BALANCE_SELECT = """
     SELECT a.*,
-        COALESCE(SUM(CASE WHEN t.status IN ('PENDING', 'CLEARED') THEN t.amount_cents END), 0) AS current_cents,
-        COALESCE(SUM(CASE WHEN t.status = 'CLEARED' THEN t.amount_cents END), 0) AS cleared_cents,
+        COALESCE(SUM(CASE WHEN t.status = 'SPENT' THEN t.amount_cents END), 0) AS current_cents,
         COALESCE(SUM(t.amount_cents), 0) AS projected_cents
     FROM accounts a
     LEFT JOIN transactions t ON t.account_id = a.id AND t.is_deleted = 0

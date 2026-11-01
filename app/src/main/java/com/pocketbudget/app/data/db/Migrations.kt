@@ -46,5 +46,22 @@ object Migrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2)
+    /**
+     * v3: statuses simplified to SCHEDULED / SPENT. PENDING and CLEARED both meant
+     * "money has moved", so both become SPENT; balances and history are unchanged
+     * in meaning. Revision snapshots are relabelled too so they stay readable. The
+     * validation and immutability triggers are dropped for this one-off rewrite,
+     * inside the migration transaction, and recreated with the new rules on open.
+     */
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            (LedgerSchema.STATUS_TRIGGERS + "trg_revisions_immutable_update").forEach {
+                db.execSQL("DROP TRIGGER IF EXISTS $it")
+            }
+            db.execSQL("UPDATE transactions SET status = 'SPENT' WHERE status IN ('PENDING', 'CLEARED')")
+            db.execSQL("UPDATE transaction_revisions SET status = 'SPENT' WHERE status IN ('PENDING', 'CLEARED')")
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 }

@@ -38,6 +38,7 @@ import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
 import com.pocketbudget.app.ui.components.BackTopBar
 import com.pocketbudget.app.ui.components.DateField
+import com.pocketbudget.app.ui.components.MoneyField
 import com.pocketbudget.app.ui.components.PickerField
 import java.time.LocalDate
 
@@ -118,19 +119,12 @@ fun TransactionEditorScreen(state: TransactionEditorState, actions: TransactionE
                     supportingText = stringResource(R.string.error_account_required).takeIf { state.toAccountMissing },
                 )
             }
-            OutlinedTextField(
+            MoneyField(
                 value = state.amount,
                 onValueChange = actions.onAmountChange,
-                label = { Text(stringResource(R.string.field_amount)) },
+                label = stringResource(R.string.field_amount),
                 isError = state.amountInvalid,
-                supportingText = if (state.amountInvalid) {
-                    { Text(stringResource(R.string.error_amount_invalid)) }
-                } else {
-                    null
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth(),
+                supportingText = stringResource(R.string.error_amount_invalid).takeIf { state.amountInvalid },
             )
             DateField(stringResource(R.string.field_date), state.date, actions.onDateChange)
             if (!state.isTransfer) {
@@ -151,7 +145,8 @@ fun TransactionEditorScreen(state: TransactionEditorState, actions: TransactionE
             if (state.isNew) {
                 PickerField(
                     label = stringResource(R.string.field_status),
-                    options = TransactionStatus.entries.map { it to stringResource(statusLabel(it)) },
+                    options = listOf(TransactionStatus.SPENT, TransactionStatus.SCHEDULED)
+                        .map { it to stringResource(statusLabel(it)) },
                     selected = state.status,
                     onSelect = actions.onStatusChange,
                     supportingText = stringResource(R.string.hint_status),
@@ -219,6 +214,5 @@ fun typeLabel(type: TransactionType): Int = when (type) {
 
 fun statusLabel(status: TransactionStatus): Int = when (status) {
     TransactionStatus.SCHEDULED -> R.string.status_scheduled
-    TransactionStatus.PENDING -> R.string.status_pending
-    TransactionStatus.CLEARED -> R.string.status_cleared
+    TransactionStatus.SPENT -> R.string.status_spent
 }

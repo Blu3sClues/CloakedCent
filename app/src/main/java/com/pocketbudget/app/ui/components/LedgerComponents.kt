@@ -129,13 +129,8 @@ fun StatusChip(status: TransactionStatus, modifier: Modifier = Modifier) {
             MaterialTheme.colorScheme.tertiaryContainer,
             MaterialTheme.colorScheme.onTertiaryContainer,
         )
-        TransactionStatus.PENDING -> Triple(
-            R.string.status_pending,
-            MaterialTheme.colorScheme.secondaryContainer,
-            MaterialTheme.colorScheme.onSecondaryContainer,
-        )
-        TransactionStatus.CLEARED -> Triple(
-            R.string.status_cleared,
+        TransactionStatus.SPENT -> Triple(
+            R.string.status_spent,
             MaterialTheme.colorScheme.primaryContainer,
             MaterialTheme.colorScheme.onPrimaryContainer,
         )

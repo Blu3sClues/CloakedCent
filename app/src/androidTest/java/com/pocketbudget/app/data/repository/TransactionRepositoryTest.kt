@@ -11,9 +11,8 @@ import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.PeriodSummary
 import com.pocketbudget.app.domain.model.TransactionEdit
 import com.pocketbudget.app.domain.model.TransactionStatus
-import com.pocketbudget.app.domain.model.TransactionStatus.CLEARED
-import com.pocketbudget.app.domain.model.TransactionStatus.PENDING
 import com.pocketbudget.app.domain.model.TransactionStatus.SCHEDULED
+import com.pocketbudget.app.domain.model.TransactionStatus.SPENT
 import com.pocketbudget.app.domain.model.TransactionType
 import com.pocketbudget.app.domain.model.TransactionType.EXPENSE
 import com.pocketbudget.app.domain.model.TransactionType.INCOME
@@ -51,12 +50,12 @@ class TransactionRepositoryTest {
         accountId: Long,
         type: TransactionType,
         cents: Long,
-        status: TransactionStatus = PENDING,
+        status: TransactionStatus = SPENT,
         categoryId: Long? = null,
     ) = NewTransaction("req-$id", accountId, type, Money(cents), today, status, categoryId)
 
-    private fun transfer(id: String, from: Long, to: Long, cents: Long) =
-        NewTransfer("xfer-$id", from, to, Money(cents), today, CLEARED)
+    private fun transfer(id: String, from: Long, to: Long, cents: Long, status: TransactionStatus = SPENT) =
+        NewTransfer("xfer-$id", from, to, Money(cents), today, status)
 
     private suspend inline fun <reified E : Throwable> assertFails(crossinline block: suspend () -> Unit) {
         try {
@@ -70,14 +69,20 @@ class TransactionRepositoryTest {
     @Test
     fun incomeAndExpenseUpdateBalancesAndMonthlySummary() = runTest {
         val a = account("Checking", openingCents = 100_000)
-        t.ledger.record(entry("pay", a, INCOME, 50_000, CLEARED))
-        t.ledger.record(entry("food", a, EXPENSE, 20_000, PENDING))
+        t.ledger.record(entry("pay", a, INCOME, 50_000))
+        t.ledger.record(entry("food", a, EXPENSE, 20_000))
 
         val b = balances().getValue(a)
         assertEquals(Money(130_000), b.current)
-        assertEquals(Money(150_000), b.cleared)
         assertEquals(Money(130_000), b.projected)
         assertEquals(PeriodSummary(Money(50_000), Money(20_000)), monthSummary())
+    }
+
+    @Test
+    fun newEntriesDefaultToSpent() = runTest {
+        val a = account("A")
+        val id = t.ledger.record(NewTransaction("default", a, INCOME, Money(100), today))
+        assertEquals(SPENT, t.db.transactionDao().getById(id)!!.status)
     }
 
     @Test
@@ -99,26 +104,43 @@ class TransactionRepositoryTest {
     }
 
     @Test
-    fun scheduledEntriesAreProjectedUntilConfirmedExactlyOnce() = runTest {
+    fun scheduledEntriesAreProjectedUntilMarkedSpentExactlyOnce() = runTest {
         val a = account("A", 10_000)
         val id = t.ledger.record(entry("bill", a, EXPENSE, 2_500, SCHEDULED))
 
         balances().getValue(a).let {
-            assertEquals("scheduled must not affect current", Money(10_000), it.current)
-            assertEquals(Money(10_000), it.cleared)
+            assertEquals("scheduled must not affect the actual balance", Money(10_000), it.current)
             assertEquals(Money(7_500), it.projected)
         }
         assertEquals(PeriodSummary.ZERO, monthSummary())
 
         assertTrue(t.ledger.confirm(id))
-        assertFalse("second confirm must be a no-op", t.ledger.confirm(id))
-        assertEquals(Money(7_500), balances().getValue(a).current)
-        assertEquals(Money(10_000), balances().getValue(a).cleared)
+        assertFalse("second conversion must be a no-op", t.ledger.confirm(id))
+        balances().getValue(a).let {
+            assertEquals(Money(7_500), it.current)
+            assertEquals(Money(7_500), it.projected)
+        }
+        assertEquals(PeriodSummary(Money.ZERO, Money(2_500)), monthSummary())
+        val history = t.db.transactionDao().getRevisions(id).single()
+        assertEquals(RevisionAction.STATUS_CHANGE, history.action)
+        assertEquals(SCHEDULED, history.status)
+    }
 
-        assertTrue(t.ledger.markCleared(id))
-        assertFalse(t.ledger.markCleared(id))
-        assertEquals(Money(7_500), balances().getValue(a).cleared)
-        assertEquals(2, t.db.transactionDao().getRevisions(id).size)
+    @Test
+    fun scheduledTransferMovesMoneyWhenMarkedSpent() = runTest {
+        val a = account("A", 10_000)
+        val b = account("B")
+        val transferId = t.ledger.recordTransfer(transfer("plan", a, b, 4_000, SCHEDULED))
+        val leg = t.db.transactionDao().getTransferLegs(transferId).first()
+
+        assertEquals(Money(10_000), balances().getValue(a).current)
+        assertEquals(Money(6_000), balances().getValue(a).projected)
+        assertEquals(Money(4_000), balances().getValue(b).projected)
+
+        assertTrue(t.ledger.confirm(leg.id))
+        assertEquals(Money(6_000), balances().getValue(a).current)
+        assertEquals(Money(4_000), balances().getValue(b).current)
+        assertEquals(Money(10_000), balances().values.toList().consolidated().current)
     }
 
     @Test

@@ -65,7 +65,7 @@ class DashboardViewModelTest {
         advanceUntilIdle()
 
         val checking = Account(1, "Checking", AccountType.CHECKING, Money.ZERO, true)
-        accounts.value = listOf(AccountBalance(checking, Money(5_000), Money(4_000), Money(3_000)))
+        accounts.value = listOf(AccountBalance(checking, Money(5_000), Money(3_000)))
         advanceUntilIdle()
 
         val ready = vm.uiState.value as DashboardUiState.Ready
@@ -93,7 +93,7 @@ class DashboardViewModelTest {
         assertTrue(seeded)
 
         accounts.value = listOf(
-            AccountBalance(Account(1, "A", AccountType.CASH, Money.ZERO, true), Money.ZERO, Money.ZERO, Money.ZERO),
+            AccountBalance(Account(1, "A", AccountType.CASH, Money.ZERO, true), Money.ZERO, Money.ZERO),
         )
         advanceUntilIdle()
         assertFalse((vm.uiState.value as DashboardUiState.Ready).canLoadSampleData)
@@ -128,7 +128,6 @@ class DashboardViewModelTest {
         override suspend fun edit(id: Long, edit: TransactionEdit) = Unit
         override suspend fun delete(id: Long) = Unit
         override suspend fun confirm(id: Long) = false
-        override suspend fun markCleared(id: Long) = false
         override fun observeRecent(limit: Int): Flow<List<TransactionListItem>> = flowOf(emptyList())
         override fun search(filter: TransactionFilter): Flow<List<TransactionListItem>> = flowOf(emptyList())
         override fun observeDetail(id: Long): Flow<TransactionDetail?> = flowOf(null)

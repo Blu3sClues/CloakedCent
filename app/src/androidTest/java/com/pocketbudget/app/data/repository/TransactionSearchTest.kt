@@ -48,7 +48,7 @@ class TransactionSearchTest {
         suspend fun expense(id: String, cents: Long, day: Int, category: Long?, payee: Long?, note: String? = null) =
             t.ledger.record(
                 NewTransaction(id, checking, TransactionType.EXPENSE, Money(cents), nov1.plusDays(day.toLong()),
-                    TransactionStatus.PENDING, category, payee, note),
+                    TransactionStatus.SPENT, category, payee, note),
             )
         expense("groceries", 4_000, 0, groceries, market)
         expense("restaurant", 2_500, 5, food, null, note = "100% tasty")

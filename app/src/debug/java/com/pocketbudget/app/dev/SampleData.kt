@@ -54,10 +54,10 @@ object SampleData {
             ),
         )
 
-        entry("salary", checking, TransactionType.INCOME, "3200.00", firstOfMonth, TransactionStatus.CLEARED, "Salary", "Employer")
-        entry("rent", checking, TransactionType.EXPENSE, "1100.00", firstOfMonth, TransactionStatus.CLEARED, "Housing", "Landlord")
-        entry("groceries", card, TransactionType.EXPENSE, "86.42", today, TransactionStatus.PENDING, "Groceries", "Fresh Market")
-        entry("dinner", card, TransactionType.EXPENSE, "42.15", today, TransactionStatus.CLEARED, "Dining out", "Corner Bistro")
+        entry("salary", checking, TransactionType.INCOME, "3200.00", firstOfMonth, TransactionStatus.SPENT, "Salary", "Employer")
+        entry("rent", checking, TransactionType.EXPENSE, "1100.00", firstOfMonth, TransactionStatus.SPENT, "Housing", "Landlord")
+        entry("groceries", card, TransactionType.EXPENSE, "86.42", today, TransactionStatus.SPENT, "Groceries", "Fresh Market")
+        entry("dinner", card, TransactionType.EXPENSE, "42.15", today, TransactionStatus.SPENT, "Dining out", "Corner Bistro")
         entry("power", checking, TransactionType.EXPENSE, "64.30", today.plusDays(10), TransactionStatus.SCHEDULED, "Utilities", "City Power")
         ledger.recordTransfer(
             NewTransfer(
@@ -66,7 +66,7 @@ object SampleData {
                 toAccountId = savings,
                 amount = Money.parse("500.00"),
                 occurredOn = firstOfMonth.plusDays(1),
-                status = TransactionStatus.CLEARED,
+                status = TransactionStatus.SPENT,
             ),
         )
     }

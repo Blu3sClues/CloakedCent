@@ -58,7 +58,7 @@ class FakeLedger {
 
     private fun check() = failure?.let { throw it }
 
-    private fun balance(a: Account) = AccountBalance(a, Money.ZERO, Money.ZERO, Money.ZERO)
+    private fun balance(a: Account) = AccountBalance(a, Money.ZERO, Money.ZERO)
 
     val accountRepository = object : AccountRepository {
         override suspend fun create(name: String, type: AccountType, openingBalance: Money, includeInTotals: Boolean): Long {
@@ -101,7 +101,6 @@ class FakeLedger {
             check()
         }
         override suspend fun confirm(id: Long) = true
-        override suspend fun markCleared(id: Long) = true
         override fun observeRecent(limit: Int): Flow<List<TransactionListItem>> = flowOf(emptyList())
         override fun observePeriodSummary(start: LocalDate, endInclusive: LocalDate) = flowOf(PeriodSummary.ZERO)
         override fun search(filter: TransactionFilter): Flow<List<TransactionListItem>> {

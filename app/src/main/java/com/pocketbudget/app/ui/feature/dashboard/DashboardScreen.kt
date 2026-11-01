@@ -71,6 +71,7 @@ class DashboardActions(
     val onOpenAccount: (Long) -> Unit = {},
     val onOpenTransaction: (Long) -> Unit = {},
     val onOpenHistory: () -> Unit = {},
+    val onOpenSettings: () -> Unit = {},
 )
 
 @Composable
@@ -80,6 +81,7 @@ fun DashboardRoute(
     onOpenAccount: (Long) -> Unit,
     onOpenTransaction: (Long) -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenSettings: () -> Unit,
     viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -93,6 +95,7 @@ fun DashboardRoute(
             onOpenAccount = onOpenAccount,
             onOpenTransaction = onOpenTransaction,
             onOpenHistory = onOpenHistory,
+            onOpenSettings = onOpenSettings,
         ),
     )
 }
@@ -116,6 +119,9 @@ fun DashboardScreen(uiState: DashboardUiState, actions: DashboardActions) {
                         IconButton(onClick = actions.onOpenHistory) {
                             Icon(painterResource(R.drawable.ic_search), stringResource(R.string.action_search))
                         }
+                    }
+                    IconButton(onClick = actions.onOpenSettings) {
+                        Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
                     }
                 },
             )
@@ -216,9 +222,8 @@ private fun BalanceHeroCard(totals: ConsolidatedBalance, thisMonth: PeriodSummar
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.dashboard_total_balance), style = MaterialTheme.typography.labelLarge)
             MoneyText(totals.current, style = MoneyTextStyles.hero)
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                LabeledAmount(stringResource(R.string.balance_cleared), totals.cleared)
-                LabeledAmount(stringResource(R.string.balance_projected), totals.projected)
+            if (totals.projected != totals.current) {
+                LabeledAmount(stringResource(R.string.balance_projected_with_scheduled), totals.projected)
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
             Row(Modifier.fillMaxWidth()) {
@@ -306,8 +311,8 @@ private fun DashboardPreview() {
         DashboardScreen(
             uiState = DashboardUiState.Ready(
                 storage = StorageStatus(Instant.now(), "4.x community"),
-                totals = ConsolidatedBalance(Money(245_000), Money(240_000), Money(230_000)),
-                accounts = listOf(AccountBalance(checking, Money(245_000), Money(240_000), Money(230_000))),
+                totals = ConsolidatedBalance(Money(245_000), Money(230_000)),
+                accounts = listOf(AccountBalance(checking, Money(245_000), Money(230_000))),
                 thisMonth = PeriodSummary(Money(320_000), Money(75_050)),
                 recent = emptyList(),
                 canLoadSampleData = false,

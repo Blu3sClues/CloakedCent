@@ -55,7 +55,7 @@ class DashboardScreenTest {
         val checking = Account(1, "Everyday checking", AccountType.CHECKING, Money.ZERO, true)
         show(
             ready(
-                accounts = listOf(AccountBalance(checking, Money(1_000), Money(1_000), Money(500))),
+                accounts = listOf(AccountBalance(checking, Money(1_000), Money(500))),
                 recent = listOf(
                     TransactionListItem(
                         id = 1, type = TransactionType.TRANSFER, status = TransactionStatus.SCHEDULED,

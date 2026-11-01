@@ -86,7 +86,7 @@ class FormScreensTest {
         var deletes = 0
         compose.setContent {
             PocketBudgetTheme {
-                TransactionDetailScreen(DetailState.Loaded(detail), null, {}, {}, {}, {}, { deletes++ })
+                TransactionDetailScreen(DetailState.Loaded(detail), null, {}, {}, {}, { deletes++ })
             }
         }
         compose.onNodeWithText("Delete").performScrollTo().performClick()
@@ -102,9 +102,9 @@ class FormScreensTest {
     @Test
     fun detailShowsScheduledActionAndAuditTrail() {
         compose.setContent {
-            PocketBudgetTheme { TransactionDetailScreen(DetailState.Loaded(detail), null, {}, {}, {}, {}, {}) }
+            PocketBudgetTheme { TransactionDetailScreen(DetailState.Loaded(detail), null, {}, {}, {}, {}) }
         }
-        compose.onNodeWithText("Confirm it happened").assertIsDisplayed()
+        compose.onNodeWithText("Mark as spent").assertIsDisplayed()
         compose.onNodeWithText("Before:", substring = true).performScrollTo().assertIsDisplayed()
     }
 
@@ -115,7 +115,7 @@ class FormScreensTest {
             PocketBudgetTheme {
                 AccountEditorScreen(
                     AccountEditorState(isNew = false, loading = false, name = "Savings"),
-                    {}, {}, {}, {}, {}, {}, { archives++ }, null,
+                    {}, {}, {}, {}, {}, {}, { archives++ },
                 )
             }
         }

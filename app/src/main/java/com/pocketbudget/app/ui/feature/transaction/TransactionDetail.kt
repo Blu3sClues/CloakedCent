@@ -81,8 +81,7 @@ class TransactionDetailViewModel(
     private val _error = MutableStateFlow<Int?>(null)
     val error: StateFlow<Int?> = _error.asStateFlow()
 
-    fun confirm() = act { transactions.confirm(id) }
-    fun markCleared() = act { transactions.markCleared(id) }
+    fun markSpent() = act { transactions.confirm(id) }
     fun delete() = act { transactions.delete(id) }
 
     private fun act(action: suspend () -> Unit) {
@@ -118,7 +117,7 @@ fun TransactionDetailRoute(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
-    TransactionDetailScreen(state, error, onBack, onEdit, viewModel::confirm, viewModel::markCleared, viewModel::delete)
+    TransactionDetailScreen(state, error, onBack, onEdit, viewModel::markSpent, viewModel::delete)
 }
 
 @Composable
@@ -127,8 +126,7 @@ fun TransactionDetailScreen(
     @StringRes error: Int?,
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
-    onConfirm: () -> Unit,
-    onMarkCleared: () -> Unit,
+    onMarkSpent: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
@@ -155,14 +153,10 @@ fun TransactionDetailScreen(
                     SummaryCard(state.detail)
                     error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
                     if (!state.detail.isDeleted) {
-                        when (state.detail.status) {
-                            TransactionStatus.SCHEDULED -> Button(onConfirm, Modifier.fillMaxWidth()) {
-                                Text(stringResource(R.string.action_confirm_happened))
+                        if (state.detail.status == TransactionStatus.SCHEDULED) {
+                            Button(onMarkSpent, Modifier.fillMaxWidth()) {
+                                Text(stringResource(R.string.action_mark_spent))
                             }
-                            TransactionStatus.PENDING -> Button(onMarkCleared, Modifier.fillMaxWidth()) {
-                                Text(stringResource(R.string.action_mark_cleared))
-                            }
-                            TransactionStatus.CLEARED -> Unit
                         }
                         OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)

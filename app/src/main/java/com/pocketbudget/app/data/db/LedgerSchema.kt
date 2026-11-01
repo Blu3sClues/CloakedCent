@@ -17,7 +17,10 @@ object LedgerSchema {
         OR (NEW.type = 'TRANSFER' AND NEW.amount_cents <> 0 AND NEW.transfer_id IS NOT NULL
             AND NEW.category_id IS NULL)
     """
-    private const val VALID_STATUS = "NEW.status IN ('SCHEDULED', 'PENDING', 'CLEARED')"
+    private const val VALID_STATUS = "NEW.status IN ('SCHEDULED', 'SPENT')"
+
+    /** Triggers whose SQL changed in a later schema version; migrations drop them so onOpen recreates them. */
+    val STATUS_TRIGGERS = listOf("trg_transactions_validate_insert", "trg_transactions_validate_update")
 
     private val TRIGGERS = listOf(
         """

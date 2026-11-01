@@ -25,7 +25,7 @@ class MoneyFormatter(locale: Locale = Locale.getDefault(), currency: Currency = 
     fun formatSigned(money: Money): String =
         if (money.isPositive) "+${format(money)}" else format(money)
 
-    private companion object {
+    companion object {
         fun defaultCurrency(locale: Locale): Currency =
             runCatching { Currency.getInstance(locale) }.getOrNull() ?: Currency.getInstance("USD")
     }

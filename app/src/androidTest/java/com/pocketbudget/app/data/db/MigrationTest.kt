@@ -5,7 +5,12 @@ import androidx.room.testing.MigrationTestHelper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import android.database.sqlite.SQLiteException
+import com.pocketbudget.app.core.money.Money
+import com.pocketbudget.app.data.repository.RoomAccountRepository
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertThrows
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -85,6 +90,77 @@ class MigrationTest {
             assertEquals(11, it.getInt(0))
         }
         db.close()
+    }
+
+    @Test
+    fun migrate2To3ConvertsStatusesAndKeepsBalancesAndHistory() = runTest {
+        helper.createDatabase(TEST_DB, 2).apply {
+            // Triggers exactly as a v2 install had them.
+            execSQL(
+                """
+                CREATE TRIGGER trg_transactions_validate_update BEFORE UPDATE ON transactions
+                WHEN NEW.status NOT IN ('SCHEDULED', 'PENDING', 'CLEARED')
+                BEGIN SELECT RAISE(ABORT, 'v2 rule'); END
+                """,
+            )
+            execSQL(
+                """
+                CREATE TRIGGER trg_revisions_immutable_update BEFORE UPDATE ON transaction_revisions
+                BEGIN SELECT RAISE(ABORT, 'revisions are immutable'); END
+                """,
+            )
+            execSQL(
+                """
+                INSERT INTO accounts (id, name, type, opening_balance_cents, include_in_totals, is_archived, created_at, updated_at)
+                VALUES (1, 'Checking', 'CHECKING', 10000, 1, 0, 0, 0)
+                """,
+            )
+            fun entry(id: Int, cents: Long, status: String) = execSQL(
+                """
+                INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on,
+                    revision, is_deleted, created_at, updated_at)
+                VALUES (?, ?, 1, ?, ?, ?, 20400, 2, 0, 0, 0)
+                """,
+                arrayOf<Any>(id, "r$id", if (cents > 0) "INCOME" else "EXPENSE", cents, status),
+            )
+            entry(1, 5_000, "CLEARED")
+            entry(2, -1_000, "PENDING")
+            entry(3, -2_000, "SCHEDULED")
+            execSQL(
+                """
+                INSERT INTO transaction_revisions (transaction_id, revision, action, account_id, type, amount_cents,
+                    status, occurred_on, recorded_at)
+                VALUES (2, 1, 'UPDATE', 1, 'EXPENSE', -900, 'PENDING', 20400, 0)
+                """,
+            )
+            close()
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 3, true, Migrations.MIGRATION_2_3)
+        migrated.query("SELECT id, status FROM transactions ORDER BY id").use {
+            val statuses = generateSequence { if (it.moveToNext()) it.getString(1) else null }.toList()
+            assertEquals(listOf("SPENT", "SPENT", "SCHEDULED"), statuses)
+        }
+        migrated.query("SELECT status, amount_cents FROM transaction_revisions").use {
+            it.moveToFirst()
+            assertEquals("SPENT", it.getString(0))
+            assertEquals(-900L, it.getLong(1))
+        }
+        migrated.close()
+
+        // Open as the app does: triggers are recreated with v3 rules.
+        val db = PocketBudgetDatabaseFactory.create(context, passphrase, name = TEST_DB)
+        helper.closeWhenFinished(db)
+        val balance = RoomAccountRepository({ db }).observeBalances().first().single()
+        assertEquals("opening + income - expense", Money(14_000), balance.current)
+        assertEquals("scheduled stays projected only", Money(12_000), balance.projected)
+        val writable = db.openHelper.writableDatabase
+        assertThrows(SQLiteException::class.java) {
+            writable.execSQL("UPDATE transactions SET status = 'PENDING' WHERE id = 1")
+        }
+        assertThrows(SQLiteException::class.java) {
+            writable.execSQL("UPDATE transaction_revisions SET amount_cents = 0")
+        }
     }
 
     @Test

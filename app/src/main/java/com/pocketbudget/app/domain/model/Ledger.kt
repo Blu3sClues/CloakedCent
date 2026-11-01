@@ -16,21 +16,19 @@ data class Account(
 )
 
 /**
- * Balances for one account. All three include the opening balance.
- * - [current]: confirmed activity (pending + cleared). What the user has actually spent/received.
- * - [cleared]: only activity marked as cleared by the bank.
- * - [projected]: current plus scheduled (not yet happened) activity.
+ * Balances for one account. Both include the opening balance.
+ * - [current]: actual balance from SPENT entries only.
+ * - [projected]: current plus SCHEDULED (not yet happened) entries.
  */
 data class AccountBalance(
     val account: Account,
     val current: Money,
-    val cleared: Money,
     val projected: Money,
 )
 
-data class ConsolidatedBalance(val current: Money, val cleared: Money, val projected: Money) {
+data class ConsolidatedBalance(val current: Money, val projected: Money) {
     companion object {
-        val ZERO = ConsolidatedBalance(Money.ZERO, Money.ZERO, Money.ZERO)
+        val ZERO = ConsolidatedBalance(Money.ZERO, Money.ZERO)
     }
 }
 
@@ -39,7 +37,6 @@ fun List<AccountBalance>.consolidated(): ConsolidatedBalance {
     val included = filter { it.account.includeInTotals }
     return ConsolidatedBalance(
         current = included.map { it.current }.sum(),
-        cleared = included.map { it.cleared }.sum(),
         projected = included.map { it.projected }.sum(),
     )
 }
@@ -53,10 +50,14 @@ enum class PayeeType { PERSON, MERCHANT }
 enum class TransactionType { INCOME, EXPENSE, TRANSFER }
 
 /**
- * Lifecycle of a ledger entry. Only PENDING and CLEARED represent money that has
- * actually moved; SCHEDULED entries are projections and never count as current.
+ * Lifecycle of a ledger entry. SPENT means the money has actually moved (for
+ * income too); SCHEDULED entries are projections and never count as current.
+ * Schema v3 merged the former PENDING and CLEARED statuses into SPENT.
  */
-enum class TransactionStatus { SCHEDULED, PENDING, CLEARED }
+enum class TransactionStatus { SCHEDULED, SPENT }
+
+/** App-wide appearance choice. */
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /**
  * A new income or expense. [amount] is a positive magnitude; the ledger applies the sign.
@@ -68,7 +69,7 @@ data class NewTransaction(
     val type: TransactionType,
     val amount: Money,
     val occurredOn: LocalDate,
-    val status: TransactionStatus = TransactionStatus.PENDING,
+    val status: TransactionStatus = TransactionStatus.SPENT,
     val categoryId: Long? = null,
     val payeeId: Long? = null,
     val note: String? = null,
@@ -81,7 +82,7 @@ data class NewTransfer(
     val toAccountId: Long,
     val amount: Money,
     val occurredOn: LocalDate,
-    val status: TransactionStatus = TransactionStatus.PENDING,
+    val status: TransactionStatus = TransactionStatus.SPENT,
     val note: String? = null,
 )
 

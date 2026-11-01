@@ -46,6 +46,7 @@ import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.ui.components.AmountInput
 import com.pocketbudget.app.ui.components.BackTopBar
 import com.pocketbudget.app.ui.components.ConfirmDialog
+import com.pocketbudget.app.ui.components.MoneyField
 import com.pocketbudget.app.ui.components.PickerField
 import com.pocketbudget.app.ui.components.accountTypeLabel
 import com.pocketbudget.app.ui.components.ledgerErrorMessage
@@ -67,6 +68,7 @@ data class AccountEditorState(
     @StringRes val error: Int? = null,
     val saving: Boolean = false,
     val finished: Boolean = false,
+    val archived: Boolean = false,
 )
 
 /** Form state only: every rule is enforced by [AccountRepository]. */
@@ -124,15 +126,15 @@ class AccountEditorViewModel(
 
     fun archive() {
         val id = accountId ?: return
-        run { accounts.archive(id) }
+        run(archiving = true) { accounts.archive(id) }
     }
 
-    private fun run(action: suspend () -> Unit) {
+    private fun run(archiving: Boolean = false, action: suspend () -> Unit) {
         _state.update { it.copy(saving = true, error = null) }
         viewModelScope.launch {
             try {
                 action()
-                _state.update { it.copy(saving = false, finished = true) }
+                _state.update { it.copy(saving = false, finished = true, archived = archiving) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -158,12 +160,13 @@ class AccountEditorViewModel(
 @Composable
 fun AccountEditorRoute(
     onDone: () -> Unit,
-    onViewTransactions: (Long) -> Unit,
-    accountId: Long?,
+    onArchived: () -> Unit,
     viewModel: AccountEditorViewModel = viewModel(factory = AccountEditorViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    LaunchedEffect(state.finished) { if (state.finished) onDone() }
+    LaunchedEffect(state.finished) {
+        if (state.finished) if (state.archived) onArchived() else onDone()
+    }
     AccountEditorScreen(
         state = state,
         onBack = onDone,
@@ -173,7 +176,6 @@ fun AccountEditorRoute(
         onIncludeInTotalsChange = viewModel::onIncludeInTotalsChange,
         onSave = viewModel::save,
         onArchive = viewModel::archive,
-        onViewTransactions = accountId?.let { id -> { onViewTransactions(id) } },
     )
 }
 
@@ -187,7 +189,6 @@ fun AccountEditorScreen(
     onIncludeInTotalsChange: (Boolean) -> Unit,
     onSave: () -> Unit,
     onArchive: () -> Unit,
-    onViewTransactions: (() -> Unit)?,
 ) {
     var confirmArchive by remember { mutableStateOf(false) }
     Scaffold(
@@ -221,26 +222,19 @@ fun AccountEditorScreen(
                 selected = state.type,
                 onSelect = onTypeChange,
             )
-            OutlinedTextField(
+            MoneyField(
                 value = state.openingBalance,
                 onValueChange = onOpeningBalanceChange,
-                label = { Text(stringResource(R.string.field_opening_balance)) },
-                supportingText = {
-                    Text(
-                        stringResource(
-                            when {
-                                state.openingBalanceInvalid -> R.string.error_amount_invalid
-                                state.isNew -> R.string.hint_opening_balance
-                                else -> R.string.hint_opening_balance_fixed
-                            },
-                        ),
-                    )
-                },
+                label = stringResource(R.string.field_opening_balance),
+                supportingText = stringResource(
+                    when {
+                        state.openingBalanceInvalid -> R.string.error_amount_invalid
+                        state.isNew -> R.string.hint_opening_balance
+                        else -> R.string.hint_opening_balance_fixed
+                    },
+                ),
                 isError = state.openingBalanceInvalid,
                 enabled = state.isNew,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth(),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -258,11 +252,6 @@ fun AccountEditorScreen(
             }
             Button(onClick = onSave, enabled = !state.saving && !state.loading, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.action_save))
-            }
-            if (onViewTransactions != null) {
-                OutlinedButton(onClick = onViewTransactions, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.action_view_transactions))
-                }
             }
             if (!state.isNew) {
                 OutlinedButton(

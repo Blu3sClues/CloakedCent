@@ -2,6 +2,14 @@ package com.pocketbudget.app.ui.components
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import com.pocketbudget.app.core.money.MoneyFormatter
+import java.text.DecimalFormatSymbols
+import java.util.Locale
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
@@ -35,20 +43,84 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-/** Converts what a user typed into an amount. Rules about the amount itself live in the ledger. */
+/**
+ * Converts between what a user types and exact cents, for the device locale.
+ * Rules about the amount itself (e.g. must be positive) live in the ledger.
+ */
 object AmountInput {
-    fun parse(text: String): Money? {
-        val compact = text.trim().replace(" ", "")
-        val normalized = if (',' in compact && '.' !in compact && compact.substringAfterLast(',').length <= 2) {
-            compact.replace(',', '.') // decimal comma, e.g. "12,50"
-        } else {
-            compact.replace(",", "") // grouping commas, e.g. "1,234.50"
+
+    /**
+     * Accepts "38", "38.5", "1,234.56", "$1,234.56", "-250" and, when no decimal
+     * separator is present, a single separator followed by 1-2 digits as the decimal
+     * part (so "12,50" works on a US keyboard and "12.50" on a German one).
+     */
+    fun parse(text: String, locale: Locale = Locale.getDefault()): Money? {
+        val symbols = DecimalFormatSymbols.getInstance(locale)
+        val decimal = symbols.decimalSeparator
+        val grouping = symbols.groupingSeparator.takeUnless { it.isWhitespace() } ?: if (decimal == ',') '.' else ','
+        val compact = stripForEditing(text, locale).removePrefix("+")
+        val normalized = when {
+            decimal in compact -> compact.replace(grouping.toString(), "").replace(decimal, '.')
+            compact.count { it == grouping } == 1 && compact.substringAfter(grouping).length in 1..2 ->
+                compact.replace(grouping, '.')
+            else -> compact.replace(grouping.toString(), "")
         }
         return Money.parseOrNull(normalized)
     }
 
-    /** Editable text for an existing amount (no grouping, no currency symbol). */
-    fun format(money: Money): String = money.toPlainString()
+    /** Display form used when a field is not being edited, e.g. "$1,234.50". */
+    fun format(money: Money, locale: Locale = Locale.getDefault()): String = MoneyFormatter(locale).format(money)
+
+    /** Removes the currency symbol/code and spaces so the number can be edited directly. */
+    fun stripForEditing(text: String, locale: Locale = Locale.getDefault()): String {
+        val currency = MoneyFormatter.defaultCurrency(locale)
+        return text.replace(currency.getSymbol(locale), "")
+            .replace(currency.currencyCode, "")
+            .filterNot { it.isWhitespace() }
+    }
+}
+
+/**
+ * Amount entry. While focused the text is left exactly as typed (no reformatting,
+ * no cursor jumps); on leaving the field a valid amount is shown as currency, and
+ * on returning the symbol is removed for easy editing.
+ */
+@Composable
+fun MoneyField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    enabled: Boolean = true,
+    supportingText: String? = null,
+) {
+    var field by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    // Adopt changes made outside the field (prefill, focus formatting) with the cursor at the end.
+    val shown = if (field.text == value) field else TextFieldValue(value, TextRange(value.length)).also { field = it }
+    OutlinedTextField(
+        value = shown,
+        onValueChange = {
+            field = it
+            if (it.text != value) onValueChange(it.text)
+        },
+        label = { Text(label) },
+        isError = isError,
+        enabled = enabled,
+        supportingText = supportingText?.let { { Text(it) } },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { focus ->
+                val updated = if (focus.isFocused) {
+                    AmountInput.stripForEditing(value)
+                } else {
+                    AmountInput.parse(value)?.let(AmountInput::format) ?: value
+                }
+                if (updated != value) onValueChange(updated)
+            },
+    )
 }
 
 /** User-facing message for a rule violation reported by the ledger. */

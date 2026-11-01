@@ -21,12 +21,11 @@
     <string name="dashboard_no_activity_body">Recorded income, expenses and transfers will appear here.</string>
     <string name="dashboard_storage_footer">Encrypted on this device with SQLCipher %1$s · Offline</string>
 
-    <string name="balance_cleared">Cleared</string>
     <string name="balance_projected">Projected</string>
+    <string name="balance_projected_with_scheduled">Projected after scheduled</string>
 
     <string name="status_scheduled">Scheduled</string>
-    <string name="status_pending">Pending</string>
-    <string name="status_cleared">Cleared</string>
+    <string name="status_spent">Spent</string>
 
     <string name="type_income">Income</string>
     <string name="type_expense">Expense</string>
@@ -41,9 +40,8 @@
     <string name="action_edit">Edit</string>
     <string name="action_delete">Delete</string>
     <string name="action_archive">Archive account</string>
-    <string name="action_view_transactions">View transactions</string>
-    <string name="action_confirm_happened">Confirm it happened</string>
-    <string name="action_mark_cleared">Mark as cleared</string>
+    <string name="action_edit_account">Edit account</string>
+    <string name="action_mark_spent">Mark as spent</string>
     <string name="action_search">Search transactions</string>
     <string name="action_clear">Clear</string>
     <string name="action_clear_filters">Clear filters</string>
@@ -91,7 +89,7 @@
     <string name="field_payee">Payee or merchant</string>
     <string name="field_note">Note</string>
     <string name="field_status">Status</string>
-    <string name="hint_status">Scheduled = not happened yet. Pending = happened. Cleared = shown by your bank.</string>
+    <string name="hint_status">Spent = already happened and counts in your balance. Scheduled = planned; shown only in projected balances.</string>
     <string name="label_deleted">Deleted</string>
 
     <string name="confirm_delete_title">Delete this transaction?</string>
@@ -124,4 +122,9 @@
     <string name="account_type_loan">Loan</string>
     <string name="account_type_investment">Investment</string>
     <string name="account_type_other">Other</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_theme">Theme</string>
+    <string name="theme_system">System default</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
 </resources>

@@ -32,6 +32,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.util.Locale
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorViewModelsTest {
@@ -40,11 +41,19 @@ class EditorViewModelsTest {
     private val ledger = FakeLedger()
     private val clock = Clock.fixed(Instant.parse("2026-11-15T12:00:00Z"), ZoneOffset.UTC)
 
+    private val originalLocale = Locale.getDefault()
+
     @Before
-    fun setUp() = Dispatchers.setMain(dispatcher)
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+        Locale.setDefault(Locale.US)
+    }
 
     @After
-    fun tearDown() = Dispatchers.resetMain()
+    fun tearDown() {
+        Dispatchers.resetMain()
+        Locale.setDefault(originalLocale)
+    }
 
     private fun editor(
         type: TransactionType = TransactionType.EXPENSE,
@@ -139,7 +148,7 @@ class EditorViewModelsTest {
     @Test
     fun `editing prefills from the ledger and saves through edit`() = runTest(dispatcher) {
         ledger.details[7] = TransactionDetail(
-            id = 7, type = TransactionType.EXPENSE, status = TransactionStatus.PENDING, amount = Money(-4_215),
+            id = 7, type = TransactionType.EXPENSE, status = TransactionStatus.SPENT, amount = Money(-4_215),
             occurredOn = LocalDate.of(2026, 11, 2), accountId = 1, accountName = "Checking",
             categoryId = 20, categoryName = "Food", payeeId = 100, payeeName = "Fresh Market",
             counterpartAccountId = null, counterpartAccountName = null, note = "lunch", revision = 1,
@@ -147,7 +156,7 @@ class EditorViewModelsTest {
         )
         val vm = editor(id = 7)
         advanceUntilIdle()
-        assertEquals("42.15", vm.state.value.amount)
+        assertEquals("$42.15", vm.state.value.amount)
         assertEquals("Fresh Market", vm.state.value.payee)
 
         vm.onAmountChange("50")
