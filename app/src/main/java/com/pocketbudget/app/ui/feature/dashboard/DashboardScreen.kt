@@ -1,7 +1,18 @@
 package com.pocketbudget.app.ui.feature.dashboard
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.pocketbudget.app.domain.model.TransactionType
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,15 +63,44 @@ import com.pocketbudget.app.ui.theme.MoneyTextStyles
 import com.pocketbudget.app.ui.theme.PocketBudgetTheme
 import java.time.Instant
 
+class DashboardActions(
+    val onRetry: () -> Unit = {},
+    val onLoadSampleData: () -> Unit = {},
+    val onAddTransaction: (TransactionType) -> Unit = {},
+    val onAddAccount: () -> Unit = {},
+    val onOpenAccount: (Long) -> Unit = {},
+    val onOpenTransaction: (Long) -> Unit = {},
+    val onOpenHistory: () -> Unit = {},
+)
+
 @Composable
-fun DashboardRoute(viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory)) {
+fun DashboardRoute(
+    onAddTransaction: (TransactionType) -> Unit,
+    onAddAccount: () -> Unit,
+    onOpenAccount: (Long) -> Unit,
+    onOpenTransaction: (Long) -> Unit,
+    onOpenHistory: () -> Unit,
+    viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory),
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    DashboardScreen(uiState = uiState, onRetry = viewModel::retry, onLoadSampleData = viewModel::loadSampleData)
+    DashboardScreen(
+        uiState = uiState,
+        actions = DashboardActions(
+            onRetry = viewModel::retry,
+            onLoadSampleData = viewModel::loadSampleData,
+            onAddTransaction = onAddTransaction,
+            onAddAccount = onAddAccount,
+            onOpenAccount = onOpenAccount,
+            onOpenTransaction = onOpenTransaction,
+            onOpenHistory = onOpenHistory,
+        ),
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(uiState: DashboardUiState, onRetry: () -> Unit, onLoadSampleData: () -> Unit) {
+fun DashboardScreen(uiState: DashboardUiState, actions: DashboardActions) {
+    val ready = uiState as? DashboardUiState.Ready
     Scaffold(
         topBar = {
             TopAppBar(
@@ -71,7 +111,17 @@ fun DashboardScreen(uiState: DashboardUiState, onRetry: () -> Unit, onLoadSample
                         color = MaterialTheme.colorScheme.primary,
                     )
                 },
+                actions = {
+                    if (ready != null) {
+                        IconButton(onClick = actions.onOpenHistory) {
+                            Icon(painterResource(R.drawable.ic_search), stringResource(R.string.action_search))
+                        }
+                    }
+                },
             )
+        },
+        floatingActionButton = {
+            if (ready != null && ready.accounts.isNotEmpty()) AddMenuButton(actions.onAddTransaction)
         },
     ) { innerPadding ->
         Column(
@@ -84,37 +134,70 @@ fun DashboardScreen(uiState: DashboardUiState, onRetry: () -> Unit, onLoadSample
         ) {
             when (uiState) {
                 DashboardUiState.Loading -> LoadingCard()
-                is DashboardUiState.Error -> ErrorCard(uiState.reason, onRetry)
-                is DashboardUiState.Ready -> ReadyContent(uiState, onLoadSampleData)
+                is DashboardUiState.Error -> ErrorCard(uiState.reason, actions.onRetry)
+                is DashboardUiState.Ready -> ReadyContent(uiState, actions)
+            }
+            // Keeps the last row clear of the floating button.
+            Spacer(Modifier.height(72.dp))
+        }
+    }
+}
+
+@Composable
+private fun AddMenuButton(onAdd: (TransactionType) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        ExtendedFloatingActionButton(
+            onClick = { expanded = true },
+            icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
+            text = { Text(stringResource(R.string.action_add)) },
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            listOf(
+                TransactionType.EXPENSE to R.string.action_add_expense,
+                TransactionType.INCOME to R.string.action_add_income,
+                TransactionType.TRANSFER to R.string.action_add_transfer,
+            ).forEach { (type, label) ->
+                DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = { expanded = false; onAdd(type) })
             }
         }
     }
 }
 
 @Composable
-private fun ReadyContent(state: DashboardUiState.Ready, onLoadSampleData: () -> Unit) {
+private fun ReadyContent(state: DashboardUiState.Ready, actions: DashboardActions) {
     BalanceHeroCard(state.totals, state.thisMonth)
 
-    SectionHeader(stringResource(R.string.dashboard_accounts))
+    SectionHeader(
+        stringResource(R.string.dashboard_accounts),
+        actionLabel = stringResource(R.string.action_add_account),
+        onAction = actions.onAddAccount,
+    )
     if (state.accounts.isEmpty()) {
         EmptyState(
             title = stringResource(R.string.dashboard_no_accounts_title),
             body = stringResource(R.string.dashboard_no_accounts_body),
-            actionLabel = stringResource(R.string.dashboard_load_sample).takeIf { state.canLoadSampleData },
-            onAction = onLoadSampleData.takeIf { state.canLoadSampleData },
+            actionLabel = stringResource(
+                if (state.canLoadSampleData) R.string.dashboard_load_sample else R.string.action_add_account,
+            ),
+            onAction = if (state.canLoadSampleData) actions.onLoadSampleData else actions.onAddAccount,
         )
     } else {
-        ListCard(state.accounts) { AccountRow(it) }
+        ListCard(state.accounts) { AccountRow(it, Modifier.clickable { actions.onOpenAccount(it.account.id) }) }
     }
 
-    SectionHeader(stringResource(R.string.dashboard_recent))
+    SectionHeader(
+        stringResource(R.string.dashboard_recent),
+        actionLabel = stringResource(R.string.action_see_all).takeIf { state.recent.isNotEmpty() },
+        onAction = actions.onOpenHistory,
+    )
     if (state.recent.isEmpty()) {
         EmptyState(
             title = stringResource(R.string.dashboard_no_activity_title),
             body = stringResource(R.string.dashboard_no_activity_body),
         )
     } else {
-        ListCard(state.recent) { TransactionRow(it) }
+        ListCard(state.recent) { TransactionRow(it, Modifier.clickable { actions.onOpenTransaction(it.id) }) }
     }
 
     StorageFooter(state.storage)
@@ -229,8 +312,7 @@ private fun DashboardPreview() {
                 recent = emptyList(),
                 canLoadSampleData = false,
             ),
-            onRetry = {},
-            onLoadSampleData = {},
+            actions = DashboardActions(),
         )
     }
 }

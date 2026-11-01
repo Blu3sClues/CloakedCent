@@ -4,10 +4,10 @@ import androidx.room.withTransaction
 import com.pocketbudget.app.core.money.Money
 import com.pocketbudget.app.data.db.PocketBudgetDatabase
 import com.pocketbudget.app.data.db.dao.AccountBalanceRow
+import com.pocketbudget.app.data.db.dao.TransactionListRow
 import com.pocketbudget.app.data.db.entity.AccountEntity
 import com.pocketbudget.app.data.db.entity.CategoryEntity
 import com.pocketbudget.app.data.db.entity.PayeeEntity
-import com.pocketbudget.app.data.db.entity.RevisionAction
 import com.pocketbudget.app.data.db.entity.TransactionEntity
 import com.pocketbudget.app.data.db.entity.TransactionRevisionEntity
 import com.pocketbudget.app.data.db.entity.TransferEntity
@@ -20,11 +20,17 @@ import com.pocketbudget.app.domain.model.LedgerException
 import com.pocketbudget.app.domain.model.NewTransaction
 import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.PayeeType
+import com.pocketbudget.app.domain.model.Payee
 import com.pocketbudget.app.domain.model.PeriodSummary
+import com.pocketbudget.app.domain.model.RevisionAction
+import com.pocketbudget.app.domain.model.TransactionDetail
 import com.pocketbudget.app.domain.model.TransactionEdit
+import com.pocketbudget.app.domain.model.TransactionFilter
+import com.pocketbudget.app.domain.model.TransactionRevision
 import com.pocketbudget.app.domain.model.TransactionListItem
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
+import com.pocketbudget.app.domain.model.withDescendants
 import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.domain.repository.CategoryRepository
 import com.pocketbudget.app.domain.repository.PayeeRepository
@@ -32,12 +38,14 @@ import com.pocketbudget.app.domain.repository.TransactionRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
 
 /** Shared plumbing: lazy database access off the main thread and atomic writes. */
@@ -51,7 +59,10 @@ abstract class RoomRepository(
             db.withTransaction { block(db) }
         }
 
-    protected fun <T> observe(query: (PocketBudgetDatabase) -> Flow<T>): Flow<T> =
+    protected suspend fun <T> withContextRead(block: suspend (PocketBudgetDatabase) -> T): T =
+        withContext(ioDispatcher) { block(database()) }
+
+    protected fun <T> observe(query: suspend (PocketBudgetDatabase) -> Flow<T>): Flow<T> =
         flow { emitAll(query(database())) }.flowOn(ioDispatcher)
 }
 
@@ -68,7 +79,7 @@ class RoomAccountRepository(
         includeInTotals: Boolean,
     ): Long = write { db ->
         val trimmed = name.trim()
-        if (trimmed.isEmpty()) throw LedgerException.InvalidOperation("Account name is required")
+        if (trimmed.isEmpty()) throw LedgerException.NameRequired()
         val now = clock.millis()
         db.accountDao().insert(
             AccountEntity(
@@ -80,6 +91,20 @@ class RoomAccountRepository(
                 updatedAt = now,
             ),
         )
+    }
+
+    override suspend fun get(id: Long): Account? = withContextRead { db ->
+        db.accountDao().getById(id)?.takeUnless { it.isArchived }?.let {
+            Account(it.id, it.name, it.type, Money(it.openingBalanceCents), it.includeInTotals)
+        }
+    }
+
+    override suspend fun update(id: Long, name: String, type: AccountType, includeInTotals: Boolean) = write { db ->
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) throw LedgerException.NameRequired()
+        if (db.accountDao().update(id, trimmed, type, includeInTotals, clock.millis()) == 0) {
+            throw LedgerException.AccountUnavailable(id)
+        }
     }
 
     override suspend fun archive(id: Long) = write { db ->
@@ -117,7 +142,7 @@ class RoomCategoryRepository(
 
     override suspend fun create(name: String, kind: CategoryKind, parentId: Long?): Long = write { db ->
         val trimmed = name.trim()
-        if (trimmed.isEmpty()) throw LedgerException.InvalidOperation("Category name is required")
+        if (trimmed.isEmpty()) throw LedgerException.NameRequired()
         if (parentId != null) requireParent(db, parentId, kind)
         db.categoryDao().insert(
             CategoryEntity(name = trimmed, kind = kind, parentId = parentId, createdAt = clock.millis()),
@@ -158,10 +183,13 @@ class RoomPayeeRepository(
 
     override suspend fun getOrCreate(name: String, type: PayeeType): Long = write { db ->
         val trimmed = name.trim()
-        if (trimmed.isEmpty()) throw LedgerException.InvalidOperation("Payee name is required")
+        if (trimmed.isEmpty()) throw LedgerException.NameRequired()
         db.payeeDao().findByName(trimmed)?.id
             ?: db.payeeDao().insert(PayeeEntity(name = trimmed, type = type, createdAt = clock.millis()))
     }
+
+    override fun observeAll(): Flow<List<Payee>> =
+        observe { it.payeeDao().observeAll() }.map { rows -> rows.map { Payee(it.id, it.name, it.type) } }
 }
 
 class RoomTransactionRepository(
@@ -282,21 +310,82 @@ class RoomTransactionRepository(
         transition(id, from = TransactionStatus.PENDING, to = TransactionStatus.CLEARED)
 
     override fun observeRecent(limit: Int): Flow<List<TransactionListItem>> =
-        observe { it.transactionDao().observeRecent(limit) }.map { rows ->
-            rows.map {
-                TransactionListItem(
-                    id = it.id,
-                    type = it.type,
-                    status = it.status,
-                    amount = Money(it.amountCents),
-                    occurredOn = it.occurredOn,
-                    accountName = it.accountName,
-                    categoryName = it.categoryName,
-                    payeeName = it.payeeName,
-                    counterpartAccountName = it.counterpartAccountName,
-                )
+        observe { it.transactionDao().observeRecent(limit) }.map { rows -> rows.map { it.toItem() } }
+
+    override fun search(filter: TransactionFilter): Flow<List<TransactionListItem>> =
+        observe { db ->
+            val categoryIds = filter.categoryId?.let { root ->
+                db.categoryDao().getAll()
+                    .map { Category(it.id, it.name, it.kind, it.parentId) }
+                    .withDescendants(root)
+                    .toList()
+            }
+            db.transactionDao().search(
+                query = filter.query?.trim()?.takeIf { it.isNotEmpty() }?.let { "%${escapeLike(it)}%" },
+                start = filter.start,
+                endInclusive = filter.endInclusive,
+                accountId = filter.accountId,
+                filterCategory = categoryIds != null,
+                categoryIds = categoryIds.orEmpty(),
+                payeeId = filter.payeeId,
+            )
+        }.map { rows -> rows.map { it.toItem() } }
+
+    override fun observeDetail(id: Long): Flow<TransactionDetail?> =
+        observe { db ->
+            combine(db.transactionDao().observeDetail(id), db.transactionDao().observeRevisions(id)) { row, revisions ->
+                row?.let {
+                    TransactionDetail(
+                        id = it.id,
+                        type = it.type,
+                        status = it.status,
+                        amount = Money(it.amountCents),
+                        occurredOn = it.occurredOn,
+                        accountId = it.accountId,
+                        accountName = it.accountName,
+                        categoryId = it.categoryId,
+                        categoryName = it.categoryName,
+                        payeeId = it.payeeId,
+                        payeeName = it.payeeName,
+                        counterpartAccountId = it.counterpartAccountId,
+                        counterpartAccountName = it.counterpartAccountName,
+                        note = it.note,
+                        revision = it.revision,
+                        isDeleted = it.isDeleted,
+                        createdAt = Instant.ofEpochMilli(it.createdAt),
+                        updatedAt = Instant.ofEpochMilli(it.updatedAt),
+                        history = revisions.map { r ->
+                            TransactionRevision(
+                                revision = r.revision,
+                                action = r.action,
+                                amount = Money(r.amountCents),
+                                status = r.status,
+                                occurredOn = r.occurredOn,
+                                categoryName = r.categoryName,
+                                payeeName = r.payeeName,
+                                note = r.note,
+                                recordedAt = Instant.ofEpochMilli(r.recordedAt),
+                            )
+                        },
+                    )
+                }
             }
         }
+
+    private fun TransactionListRow.toItem() = TransactionListItem(
+        id = id,
+        type = type,
+        status = status,
+        amount = Money(amountCents),
+        occurredOn = occurredOn,
+        accountName = accountName,
+        categoryName = categoryName,
+        payeeName = payeeName,
+        counterpartAccountName = counterpartAccountName,
+    )
+
+    private fun escapeLike(text: String) =
+        text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     override fun observePeriodSummary(start: LocalDate, endInclusive: LocalDate): Flow<PeriodSummary> =
         observe { it.transactionDao().observePeriodSummary(start, endInclusive) }.map {

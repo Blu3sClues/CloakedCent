@@ -12,6 +12,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -64,13 +65,23 @@ fun MoneyText(
 }
 
 @Composable
-fun SectionHeader(title: String, modifier: Modifier = Modifier) {
-    Text(
-        text = title,
-        modifier = modifier.padding(start = 4.dp, top = 8.dp),
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Row(modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (actionLabel != null && onAction != null) {
+            TextButton(onClick = onAction) { Text(actionLabel) }
+        }
+    }
 }
 
 /** Card holding a list of rows separated by dividers. */
@@ -171,7 +182,10 @@ fun AccountRow(balance: AccountBalance, modifier: Modifier = Modifier) {
 @Composable
 fun TransactionRow(item: TransactionListItem, modifier: Modifier = Modifier) {
     val title = when (item.type) {
-        TransactionType.TRANSFER -> stringResource(R.string.transfer_to, item.counterpartAccountName.orEmpty())
+        TransactionType.TRANSFER -> stringResource(
+            if (item.amount.isNegative) R.string.transfer_to else R.string.transfer_from,
+            item.counterpartAccountName.orEmpty(),
+        )
         else -> item.payeeName ?: item.categoryName ?: stringResource(
             if (item.type == TransactionType.INCOME) R.string.type_income else R.string.type_expense,
         )
@@ -207,7 +221,7 @@ fun TransactionRow(item: TransactionListItem, modifier: Modifier = Modifier) {
     }
 }
 
-private fun accountTypeLabel(type: AccountType): Int = when (type) {
+fun accountTypeLabel(type: AccountType): Int = when (type) {
     AccountType.CHECKING -> R.string.account_type_checking
     AccountType.SAVINGS -> R.string.account_type_savings
     AccountType.CASH -> R.string.account_type_cash

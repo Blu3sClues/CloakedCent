@@ -8,7 +8,9 @@ import com.pocketbudget.app.domain.model.NewTransaction
 import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.PeriodSummary
 import com.pocketbudget.app.domain.model.StorageStatus
+import com.pocketbudget.app.domain.model.TransactionDetail
 import com.pocketbudget.app.domain.model.TransactionEdit
+import com.pocketbudget.app.domain.model.TransactionFilter
 import com.pocketbudget.app.domain.model.TransactionListItem
 import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.domain.repository.StorageRepository
@@ -111,6 +113,8 @@ class DashboardViewModelTest {
 
     private class FakeAccountRepository(private val balances: Flow<List<AccountBalance>>) : AccountRepository {
         override suspend fun create(name: String, type: AccountType, openingBalance: Money, includeInTotals: Boolean) = 0L
+        override suspend fun get(id: Long): Account? = null
+        override suspend fun update(id: Long, name: String, type: AccountType, includeInTotals: Boolean) = Unit
         override suspend fun archive(id: Long) = Unit
         override fun observeBalances() = balances
     }
@@ -126,6 +130,8 @@ class DashboardViewModelTest {
         override suspend fun confirm(id: Long) = false
         override suspend fun markCleared(id: Long) = false
         override fun observeRecent(limit: Int): Flow<List<TransactionListItem>> = flowOf(emptyList())
+        override fun search(filter: TransactionFilter): Flow<List<TransactionListItem>> = flowOf(emptyList())
+        override fun observeDetail(id: Long): Flow<TransactionDetail?> = flowOf(null)
         override fun observePeriodSummary(start: LocalDate, endInclusive: LocalDate): Flow<PeriodSummary> {
             requestedRange = start to endInclusive
             return flowOf(summary)

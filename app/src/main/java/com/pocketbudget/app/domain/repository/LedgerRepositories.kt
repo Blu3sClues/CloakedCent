@@ -1,7 +1,11 @@
 package com.pocketbudget.app.domain.repository
 
 import com.pocketbudget.app.core.money.Money
+import com.pocketbudget.app.domain.model.Account
 import com.pocketbudget.app.domain.model.AccountBalance
+import com.pocketbudget.app.domain.model.Payee
+import com.pocketbudget.app.domain.model.TransactionDetail
+import com.pocketbudget.app.domain.model.TransactionFilter
 import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.Category
 import com.pocketbudget.app.domain.model.CategoryKind
@@ -25,6 +29,12 @@ interface AccountRepository {
         includeInTotals: Boolean = true,
     ): Long
 
+    /** Active account, or null if missing or archived. */
+    suspend fun get(id: Long): Account?
+
+    /** Renames/retypes an active account. The opening balance is fixed at creation. */
+    suspend fun update(id: Long, name: String, type: AccountType, includeInTotals: Boolean)
+
     /** Hides an account. Only allowed when its projected balance is zero, so totals stay truthful. */
     suspend fun archive(id: Long)
 
@@ -45,6 +55,8 @@ interface CategoryRepository {
 interface PayeeRepository {
     /** Returns the existing payee with this name (case-insensitive) or creates it. */
     suspend fun getOrCreate(name: String, type: PayeeType = PayeeType.MERCHANT): Long
+
+    fun observeAll(): Flow<List<Payee>>
 }
 
 interface TransactionRepository {
@@ -70,4 +82,10 @@ interface TransactionRepository {
     fun observeRecent(limit: Int): Flow<List<TransactionListItem>>
 
     fun observePeriodSummary(start: LocalDate, endInclusive: LocalDate): Flow<PeriodSummary>
+
+    /** Live entries matching [filter], newest first. Deleted entries are excluded. */
+    fun search(filter: TransactionFilter): Flow<List<TransactionListItem>>
+
+    /** Entry with its audit history; null if it does not exist. Deleted entries are still returned. */
+    fun observeDetail(id: Long): Flow<TransactionDetail?>
 }

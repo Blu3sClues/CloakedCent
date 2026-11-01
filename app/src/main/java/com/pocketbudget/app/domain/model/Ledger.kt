@@ -2,6 +2,7 @@ package com.pocketbudget.app.domain.model
 
 import com.pocketbudget.app.core.money.Money
 import com.pocketbudget.app.core.money.sum
+import java.time.Instant
 import java.time.LocalDate
 
 enum class AccountType { CHECKING, SAVINGS, CASH, CREDIT_CARD, LOAN, INVESTMENT, OTHER }
@@ -115,9 +116,85 @@ data class PeriodSummary(val income: Money, val expense: Money) {
     }
 }
 
+data class Payee(val id: Long, val name: String, val type: PayeeType)
+
+/** Returns [rootId] and every category nested beneath it. */
+fun List<Category>.withDescendants(rootId: Long): Set<Long> {
+    val children = groupBy { it.parentId }
+    val result = mutableSetOf<Long>()
+    val pending = ArrayDeque(listOf(rootId))
+    while (pending.isNotEmpty()) {
+        val id = pending.removeFirst()
+        if (result.add(id)) children[id]?.forEach { pending.add(it.id) }
+    }
+    return result
+}
+
+/** Display path for each category, e.g. "Food › Groceries". */
+fun List<Category>.pathLabels(): Map<Long, String> {
+    val byId = associateBy { it.id }
+    return associate { category ->
+        val names = generateSequence(category) { it.parentId?.let(byId::get) }.map { it.name }.toList()
+        category.id to names.asReversed().joinToString(" › ")
+    }
+}
+
+/** All criteria are optional and combined with AND. */
+data class TransactionFilter(
+    val query: String? = null,
+    val start: LocalDate? = null,
+    val endInclusive: LocalDate? = null,
+    val accountId: Long? = null,
+    /** Matches this category and its subcategories. */
+    val categoryId: Long? = null,
+    val payeeId: Long? = null,
+) {
+    val isEmpty: Boolean get() = this == TransactionFilter()
+}
+
+enum class RevisionAction { UPDATE, STATUS_CHANGE, DELETE }
+
+/** Values an entry had before a change, as recorded in the audit history. */
+data class TransactionRevision(
+    val revision: Int,
+    val action: RevisionAction,
+    val amount: Money,
+    val status: TransactionStatus,
+    val occurredOn: LocalDate,
+    val categoryName: String?,
+    val payeeName: String?,
+    val note: String?,
+    val recordedAt: Instant,
+)
+
+data class TransactionDetail(
+    val id: Long,
+    val type: TransactionType,
+    val status: TransactionStatus,
+    /** Signed from [accountId]'s perspective. */
+    val amount: Money,
+    val occurredOn: LocalDate,
+    val accountId: Long,
+    val accountName: String,
+    val categoryId: Long?,
+    val categoryName: String?,
+    val payeeId: Long?,
+    val payeeName: String?,
+    val counterpartAccountId: Long?,
+    val counterpartAccountName: String?,
+    val note: String?,
+    val revision: Int,
+    val isDeleted: Boolean,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+    /** Oldest first. */
+    val history: List<TransactionRevision>,
+)
+
 /** Violations of ledger rules, raised before anything is written. */
 sealed class LedgerException(message: String) : Exception(message) {
     class InvalidAmount : LedgerException("Amount must be greater than zero")
+    class NameRequired : LedgerException("A name is required")
     class AccountUnavailable(id: Long) : LedgerException("Account $id does not exist or is archived")
     class CategoryMismatch : LedgerException("Category does not exist or does not match the entry type")
     class SameAccountTransfer : LedgerException("Transfer source and destination must differ")

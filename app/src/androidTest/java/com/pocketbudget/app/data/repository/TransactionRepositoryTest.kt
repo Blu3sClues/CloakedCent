@@ -2,7 +2,7 @@ package com.pocketbudget.app.data.repository
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pocketbudget.app.core.money.Money
-import com.pocketbudget.app.data.db.entity.RevisionAction
+import com.pocketbudget.app.domain.model.RevisionAction
 import com.pocketbudget.app.domain.model.AccountBalance
 import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.LedgerException

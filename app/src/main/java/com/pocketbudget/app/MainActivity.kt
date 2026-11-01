@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.pocketbudget.app.ui.feature.dashboard.DashboardRoute
+import com.pocketbudget.app.ui.navigation.PocketBudgetNavHost
 import com.pocketbudget.app.ui.theme.PocketBudgetTheme
 
 class MainActivity : ComponentActivity() {
@@ -14,7 +14,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             PocketBudgetTheme {
-                DashboardRoute()
+                PocketBudgetNavHost()
             }
         }
     }

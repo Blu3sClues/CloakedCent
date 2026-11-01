@@ -15,7 +15,7 @@
     <string name="dashboard_accounts">Accounts</string>
     <string name="dashboard_recent">Recent activity</string>
     <string name="dashboard_no_accounts_title">No accounts yet</string>
-    <string name="dashboard_no_accounts_body">Accounts and transactions you add will appear here. Everything stays encrypted on this device.</string>
+    <string name="dashboard_no_accounts_body">Add an account to start recording income, expenses and transfers. Everything stays encrypted on this device.</string>
     <string name="dashboard_load_sample">Load sample data</string>
     <string name="dashboard_no_activity_title">No activity yet</string>
     <string name="dashboard_no_activity_body">Recorded income, expenses and transfers will appear here.</string>
@@ -31,6 +31,91 @@
     <string name="type_income">Income</string>
     <string name="type_expense">Expense</string>
     <string name="transfer_to">Transfer to %1$s</string>
+    <string name="transfer_from">Transfer from %1$s</string>
+    <string name="type_transfer">Transfer</string>
+
+    <string name="action_back">Back</string>
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_save">Save</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_archive">Archive account</string>
+    <string name="action_view_transactions">View transactions</string>
+    <string name="action_confirm_happened">Confirm it happened</string>
+    <string name="action_mark_cleared">Mark as cleared</string>
+    <string name="action_search">Search transactions</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_clear_filters">Clear filters</string>
+    <string name="action_add">Add</string>
+    <string name="action_add_expense">Expense</string>
+    <string name="action_add_income">Income</string>
+    <string name="action_add_transfer">Transfer</string>
+    <string name="action_add_account">Add account</string>
+    <string name="action_see_all">See all</string>
+
+    <string name="error_amount_invalid">Enter an amount like 12.50</string>
+    <string name="error_amount_positive">The amount must be greater than zero.</string>
+    <string name="error_account_required">Choose an account</string>
+    <string name="error_name_required">A name is required.</string>
+    <string name="error_account_unavailable">That account is no longer available.</string>
+    <string name="error_category_mismatch">That category doesn\'t match the transaction type.</string>
+    <string name="error_same_account">Choose two different accounts.</string>
+    <string name="error_account_has_balance">Only accounts with a zero balance can be archived. Move or record the remaining balance first.</string>
+    <string name="error_not_found">This record could not be found.</string>
+    <string name="error_not_allowed">This change isn\'t allowed.</string>
+    <string name="error_unexpected">Something went wrong. Nothing was saved.</string>
+
+    <string name="account_new_title">New account</string>
+    <string name="account_edit_title">Edit account</string>
+    <string name="field_account_name">Account name</string>
+    <string name="field_account_type">Account type</string>
+    <string name="field_opening_balance">Opening balance</string>
+    <string name="hint_opening_balance">Use a negative amount for money owed, e.g. -250.00</string>
+    <string name="hint_opening_balance_fixed">Set when the account was created</string>
+    <string name="field_include_in_totals">Include in totals</string>
+    <string name="hint_include_in_totals">Count this account in your total balance</string>
+    <string name="confirm_archive_title">Archive this account?</string>
+    <string name="confirm_archive_body">The account will be hidden. Its transaction history is kept and cannot be lost.</string>
+
+    <string name="transaction_new_title">New transaction</string>
+    <string name="transaction_edit_title">Edit transaction</string>
+    <string name="transaction_detail_title">Transaction</string>
+    <string name="field_account">Account</string>
+    <string name="field_from_account">From account</string>
+    <string name="field_to_account">To account</string>
+    <string name="field_amount">Amount</string>
+    <string name="field_date">Date</string>
+    <string name="field_category">Category</string>
+    <string name="category_none">No category</string>
+    <string name="field_payee">Payee or merchant</string>
+    <string name="field_note">Note</string>
+    <string name="field_status">Status</string>
+    <string name="hint_status">Scheduled = not happened yet. Pending = happened. Cleared = shown by your bank.</string>
+    <string name="label_deleted">Deleted</string>
+
+    <string name="confirm_delete_title">Delete this transaction?</string>
+    <string name="confirm_delete_body">It will be removed from balances and lists. A record of it stays in the audit history.</string>
+    <string name="confirm_delete_transfer_body">Both sides of this transfer will be removed from balances and lists. A record stays in the audit history.</string>
+
+    <string name="audit_title">History</string>
+    <string name="audit_created">Created %1$s</string>
+    <string name="audit_no_changes">No changes since it was recorded.</string>
+    <string name="audit_edited">Edited %1$s</string>
+    <string name="audit_status_changed">Status changed %1$s</string>
+    <string name="audit_deleted">Deleted %1$s</string>
+    <string name="audit_previous">Before: %1$s</string>
+
+    <string name="history_title">Transactions</string>
+    <string name="history_search_hint">Search payee, category, note or account</string>
+    <string name="history_empty_title">No matching transactions</string>
+    <string name="history_empty_body">Try a different search or clear the filters.</string>
+    <string name="history_count">Results: %1$d</string>
+    <string name="filter_account">Account</string>
+    <string name="filter_category">Category</string>
+    <string name="filter_merchant">Merchant</string>
+    <string name="filter_dates">Dates</string>
+    <string name="filter_any">Any</string>
 
     <string name="account_type_checking">Checking</string>
     <string name="account_type_savings">Savings</string>

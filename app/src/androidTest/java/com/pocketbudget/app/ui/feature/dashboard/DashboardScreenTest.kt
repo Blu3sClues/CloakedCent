@@ -31,7 +31,11 @@ class DashboardScreenTest {
     val composeRule = createComposeRule()
 
     private fun show(state: DashboardUiState, onRetry: () -> Unit = {}, onSample: () -> Unit = {}) =
-        composeRule.setContent { PocketBudgetTheme { DashboardScreen(state, onRetry, onSample) } }
+        composeRule.setContent {
+            PocketBudgetTheme {
+                DashboardScreen(state, DashboardActions(onRetry = onRetry, onLoadSampleData = onSample))
+            }
+        }
 
     private fun ready(
         accounts: List<AccountBalance> = emptyList(),

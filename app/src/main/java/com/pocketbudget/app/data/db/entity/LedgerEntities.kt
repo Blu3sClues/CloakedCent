@@ -8,6 +8,7 @@ import androidx.room.PrimaryKey
 import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.CategoryKind
 import com.pocketbudget.app.domain.model.PayeeType
+import com.pocketbudget.app.domain.model.RevisionAction
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
 import java.time.LocalDate
@@ -159,8 +160,6 @@ data class TransactionEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )
-
-enum class RevisionAction { UPDATE, STATUS_CHANGE, DELETE }
 
 /** Immutable snapshot of a transaction's values before a change. */
 @Entity(
