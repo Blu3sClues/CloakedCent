@@ -166,7 +166,7 @@ class AnalysisRepositoryTest {
         assertEquals(38913L, overview.total.changeBasisPoints) // +389.13% (half up)
         assertEquals(3_913L, overview.trend.sumOf { it.amount.cents })
         assertEquals(listOf("Food", "Housing", ""), overview.topCategories.map { it.name })
-        assertEquals("FRESH MART", overview.topBrands.first().brandKey)
+        assertEquals("FRESHMART", overview.topBrands.first().brandKey)
         assertEquals(listOf("Milk 1L", "Bread", "Dish soap"), overview.topProducts.map { it.name })
     }
 
@@ -195,14 +195,14 @@ class AnalysisRepositoryTest {
     fun storesLocationsAndProductsUseConfirmedLiveReceipts() = runTest {
         scenario()
         val brands = analysis.observeBrands(november).first()
-        val mart = brands.single { it.brandKey == "FRESH MART" }
+        val mart = brands.single { it.brandKey == "FRESHMART" }
         assertEquals(Money(1_313), mart.total)
         assertEquals(2L, mart.visits)
         assertEquals(Money(657), mart.averageReceipt) // 656.5 rounds up
         assertEquals(2, mart.locations.size)
-        assertEquals(Money(600), brands.single { it.brandKey == "CORNER SHOP" }.total)
+        assertEquals(Money(600), brands.single { it.brandKey == "CORNERSHOP" }.total)
 
-        val brand = analysis.observeBrand("FRESH MART", november).first()!!
+        val brand = analysis.observeBrand("FRESHMART", november).first()!!
         assertEquals(1_313L, brand.trend.sumOf { it.amount.cents })
         assertEquals(listOf("Milk 1L", "Dish soap"), brand.topProducts.map { it.name })
         val milkPrices = brand.priceComparisons.single()

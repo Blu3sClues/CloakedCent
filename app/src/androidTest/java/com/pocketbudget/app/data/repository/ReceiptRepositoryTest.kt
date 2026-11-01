@@ -350,7 +350,7 @@ class ReceiptRepositoryTest {
         assertEquals(listOf(Money(399), Money(349)), prices.map { it.paid })
         assertEquals(Dimension.VOLUME, prices.first().normalized!!.dimension)
         assertEquals(Money(399), prices.first().normalized!!.perUnit)
-        assertEquals(2, t.db.receiptDao().getAlias(t.db.receiptDao().findStores("FRESH MART").single().id, "GV MLK 2 1L")!!.timesConfirmed)
+        assertEquals(2, t.db.receiptDao().getAlias(t.db.receiptDao().findStores(com.pocketbudget.app.domain.model.TextKeys.storeKey("Fresh Mart")).single().id, "GV MLK 2 1L")!!.timesConfirmed)
     }
 
     @Test

@@ -20,7 +20,8 @@ import java.time.LocalDate
  * Completed spending by category, for budgets. Scheduled and deleted entries never
  * count. A split expense counts once, through its splits; any part not covered by
  * splits stays with the expense's own category, so the total is always exactly the
- * expense amount.
+ * expense amount. Refunds count as negative spending in their allocated categories, on
+ * the refund date; the original purchase is never rewritten.
  */
 const val EXPENSES_SQL = """
     SELECT t.occurred_on, s.category_id, s.amount_cents AS spent_cents
@@ -35,6 +36,10 @@ const val EXPENSES_SQL = """
         WHERE t.type = 'EXPENSE' AND t.status <> 'SCHEDULED' AND t.is_deleted = 0
             AND t.category_id IS NOT NULL AND t.occurred_on >= :from
     ) WHERE spent_cents > 0
+    UNION ALL
+    SELECT t.occurred_on, a.category_id, -a.amount_cents AS spent_cents
+    FROM refund_allocations a JOIN transactions t ON t.id = a.refund_transaction_id
+    WHERE t.type = 'REFUND' AND t.is_deleted = 0 AND a.category_id IS NOT NULL AND t.occurred_on >= :from
 """
 
 /** Completed spending in one category, for budget calculations. */

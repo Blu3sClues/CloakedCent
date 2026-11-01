@@ -42,6 +42,7 @@ data class TransactionListRow(
     @ColumnInfo(name = "payee_name") val payeeName: String?,
     @ColumnInfo(name = "counterpart_account_name") val counterpartAccountName: String?,
     @ColumnInfo(name = "is_adjustment") val isAdjustment: Boolean,
+    @ColumnInfo(name = "refunded_cents") val refundedCents: Long,
 )
 
 private const val BALANCE_SELECT = """
@@ -141,7 +142,7 @@ interface TransactionDao {
         """
         SELECT
             COALESCE(SUM(CASE WHEN t.type = 'INCOME' THEN t.amount_cents END), 0) AS income_cents,
-            COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' THEN -t.amount_cents END), 0) AS expense_cents
+            COALESCE(SUM(CASE WHEN t.type IN ('EXPENSE', 'REFUND') THEN -t.amount_cents END), 0) AS expense_cents
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         WHERE t.is_deleted = 0 AND t.status <> 'SCHEDULED' AND a.include_in_totals = 1
@@ -233,7 +234,9 @@ private const val LIST_SELECT = """
         a.name AS account_name, c.name AS category_name, p.name AS payee_name,
         (SELECT a2.name FROM transactions t2 JOIN accounts a2 ON a2.id = t2.account_id
             WHERE t2.transfer_id = t.transfer_id AND t2.id <> t.id) AS counterpart_account_name,
-        t.is_adjustment
+        t.is_adjustment,
+        (SELECT COALESCE(SUM(rt.amount_cents), 0) FROM refunds rf JOIN transactions rt ON rt.id = rf.refund_transaction_id
+            WHERE rf.original_transaction_id = t.id AND rt.is_deleted = 0) AS refunded_cents
     FROM transactions t
     JOIN accounts a ON a.id = t.account_id
     LEFT JOIN categories c ON c.id = t.category_id

@@ -52,7 +52,7 @@ class AnalysisViewModelTest {
     private val repository = object : AnalysisRepository {
         override fun observeOverview(period: AnalysisPeriod): Flow<SpendingOverview> {
             requested += period
-            return spent.map { SpendingOverview(period, Comparison(it, null), 1, null, emptyList(), emptyList(), emptyList(), emptyList()) }
+            return spent.map { SpendingOverview(period, Comparison(it, null), Money.ZERO, 1, null, emptyList(), emptyList(), emptyList(), emptyList()) }
         }
         override fun observeCategories(period: AnalysisPeriod): Flow<List<CategorySpend>> = flowOf(emptyList())
         override fun observeCategory(categoryId: Long, period: AnalysisPeriod): Flow<CategoryAnalysis?> = flowOf(null)

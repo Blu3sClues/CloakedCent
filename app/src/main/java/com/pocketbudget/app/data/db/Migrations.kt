@@ -2,6 +2,7 @@ package com.pocketbudget.app.data.db
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.pocketbudget.app.domain.model.TextKeys
 
 /**
  * Every schema migration, in order.
@@ -156,5 +157,60 @@ object Migrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+    /**
+     * v7: refunds (`refunds`, `refund_allocations`) and the REFUND entry type, whose
+     * rule is added to the transaction triggers (dropped here, recreated on open).
+     * Store, product and alias keys are recomputed with the v7 normalization so
+     * "Walmart" / "WALMART SUPERCENTER" share a key. Existing rows are never merged:
+     * if two products now share a key, the later one keeps a unique suffixed key.
+     */
+    val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            LedgerSchema.STATUS_TRIGGERS.forEach { db.execSQL("DROP TRIGGER IF EXISTS $it") }
+            listOf(
+                "CREATE TABLE IF NOT EXISTS `refunds` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `refund_transaction_id` INTEGER NOT NULL, `original_transaction_id` INTEGER NOT NULL, `receipt_item_id` INTEGER, `created_at` INTEGER NOT NULL, FOREIGN KEY(`refund_transaction_id`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`original_transaction_id`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`receipt_item_id`) REFERENCES `receipt_items`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_refunds_refund_transaction_id` ON `refunds` (`refund_transaction_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_refunds_original_transaction_id` ON `refunds` (`original_transaction_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_refunds_receipt_item_id` ON `refunds` (`receipt_item_id`)",
+                "CREATE TABLE IF NOT EXISTS `refund_allocations` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `refund_transaction_id` INTEGER NOT NULL, `category_id` INTEGER, `receipt_item_id` INTEGER, `amount_cents` INTEGER NOT NULL, `item_net_cents` INTEGER, `quantity_milli` INTEGER, `created_at` INTEGER NOT NULL, FOREIGN KEY(`refund_transaction_id`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`category_id`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`receipt_item_id`) REFERENCES `receipt_items`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE INDEX IF NOT EXISTS `index_refund_allocations_refund_transaction_id` ON `refund_allocations` (`refund_transaction_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_refund_allocations_category_id` ON `refund_allocations` (`category_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_refund_allocations_receipt_item_id` ON `refund_allocations` (`receipt_item_id`)",
+            ).forEach(db::execSQL)
+            rekey(db, "SELECT id, name FROM stores ORDER BY id", "UPDATE stores SET normalized_name = ? WHERE id = ?", unique = false) {
+                TextKeys.storeKey(it)
+            }
+            // Clear keys first so the unique index never sees two rows with one key mid-update.
+            db.execSQL("UPDATE products SET normalized_name = '~' || id")
+            rekey(db, "SELECT id, name FROM products ORDER BY id", "UPDATE products SET normalized_name = ? WHERE id = ?", unique = true) {
+                TextKeys.descriptionKey(it).ifEmpty { TextKeys.normalize(it) }
+            }
+            // Aliases are unique per store; on a clash the earlier alias keeps the key.
+            val aliases = mutableListOf<Triple<Long, Long, String>>()
+            db.query("SELECT id, store_id, normalized_alias FROM product_aliases ORDER BY id").use { c ->
+                while (c.moveToNext()) aliases += Triple(c.getLong(0), c.getLong(1), c.getString(2))
+            }
+            val taken = aliases.map { it.second to it.third }.toMutableSet()
+            aliases.forEach { (id, store, old) ->
+                val key = TextKeys.descriptionKey(old)
+                if (key != old && key.isNotEmpty() && taken.add(store to key)) {
+                    taken.remove(store to old)
+                    db.execSQL("UPDATE product_aliases SET normalized_alias = ? WHERE id = ?", arrayOf<Any>(key, id))
+                }
+            }
+        }
+
+        private fun rekey(db: SupportSQLiteDatabase, select: String, update: String, unique: Boolean, key: (String) -> String) {
+            val rows = mutableListOf<Pair<Long, String>>()
+            db.query(select).use { c -> while (c.moveToNext()) rows += c.getLong(0) to c.getString(1) }
+            val used = mutableSetOf<String>()
+            rows.forEach { (id, name) ->
+                var value = key(name)
+                if (unique && !used.add(value)) value = "$value~$id"
+                db.execSQL(update, arrayOf<Any>(value, id))
+            }
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
 }

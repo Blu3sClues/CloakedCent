@@ -207,6 +207,14 @@ fun TransactionRow(item: TransactionListItem, modifier: Modifier = Modifier) {
                 signed = item.type != TransactionType.TRANSFER,
             )
             StatusChip(item.status)
+            if (item.refunded.isPositive) {
+                val full = item.refunded >= item.amount.abs()
+                Text(
+                    stringResource(if (full) R.string.refund_state_full else R.string.refund_state_partial),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }

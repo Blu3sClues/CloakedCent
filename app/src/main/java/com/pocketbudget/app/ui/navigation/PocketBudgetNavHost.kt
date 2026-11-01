@@ -216,6 +216,7 @@ fun PocketBudgetNavHost() {
                 onBack = back,
                 onEdit = { nav.navigate(Routes.editTransaction(it)) },
                 onOpenReceipt = { nav.navigate(Routes.receipt(it)) },
+                onOpenTransaction = { nav.navigate(Routes.transaction(it)) },
             )
         }
         composable(Routes.EDIT_TRANSACTION, listOf(requiredId)) { TransactionEditorRoute(onDone = back) }

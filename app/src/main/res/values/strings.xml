@@ -406,6 +406,7 @@
     <string name="analysis_vs_previous">%1$s vs previous period (%2$s)</string>
     <string name="analysis_no_previous">No spending in the previous period</string>
     <string name="analysis_purchases">Purchases</string>
+    <string name="analysis_refunds">Refunds</string>
     <string name="analysis_average_purchase">Average purchase</string>
     <string name="analysis_trend">Spending trend</string>
     <string name="analysis_top_categories">Top categories</string>
@@ -458,4 +459,31 @@
     <plurals name="analysis_chart_description">
         <item quantity="one">Chart of %1$d point from %2$s to %3$s</item>
         <item quantity="other">Chart of %1$d points from %2$s to %3$s</item>
-    </plurals></resources>
+    </plurals>
+    <!-- Refunds -->
+    <string name="type_refund">Refund</string>
+    <string name="refund_action">Refund</string>
+    <string name="refund_title">Refund</string>
+    <string name="refund_original">Original amount</string>
+    <string name="refund_refunded">Refunded so far</string>
+    <string name="refund_remaining">Remaining refundable</string>
+    <string name="refund_amount">Refund amount</string>
+    <string name="refund_full">Full refund</string>
+    <string name="refund_record">Record refund</string>
+    <string name="refund_history">Refunds</string>
+    <string name="refund_state_partial">Partly refunded</string>
+    <string name="refund_state_full">Refunded</string>
+    <string name="refund_of">Refund of an expense</string>
+    <string name="refund_open_original">Open original expense</string>
+    <string name="refund_whole_expense">Whole expense</string>
+    <string name="refund_by_quantity">By quantity</string>
+    <string name="refund_by_amount">By amount</string>
+    <string name="refund_quantity">Quantity returned (of %1$s %2$s left)</string>
+    <string name="refund_item_summary">Paid %1$s · refunded %2$s · %3$s left</string>
+    <string name="refund_calculated">Refund: %1$s</string>
+    <string name="refund_hint">The original expense is kept unchanged; the refund is recorded as a separate entry.</string>
+    <string name="error_refund_not_refundable">Only completed expenses can be refunded.</string>
+    <string name="error_refund_amount">Enter a refund amount greater than zero.</string>
+    <string name="error_refund_exceeds">That is more than the %1$s that can still be refunded.</string>
+    <string name="error_refund_quantity">Enter a quantity greater than zero and no more than is left.</string>
+</resources>

@@ -141,7 +141,7 @@ class TransactionEditorViewModel(
         val kind = when (type) {
             TransactionType.INCOME -> CategoryKind.INCOME
             TransactionType.EXPENSE -> CategoryKind.EXPENSE
-            TransactionType.TRANSFER, TransactionType.ADJUSTMENT -> return emptyList()
+            TransactionType.TRANSFER, TransactionType.ADJUSTMENT, TransactionType.REFUND -> return emptyList()
         }
         val labels = allCategories.pathLabels()
         return allCategories.filter { it.kind == kind }.map { it.id to labels.getValue(it.id) }.sortedBy { it.second }

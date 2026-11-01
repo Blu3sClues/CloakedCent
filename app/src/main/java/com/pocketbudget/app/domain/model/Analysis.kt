@@ -318,7 +318,10 @@ object PriceAnalysis {
 
 data class SpendingOverview(
     val period: AnalysisPeriod,
+    /** Net of refunds. */
     val total: Comparison,
+    /** Refunds in the period (already subtracted from [total]). */
+    val refunds: Money,
     val purchases: Long,
     val previousPurchases: Long?,
     val trend: List<TrendPoint>,
@@ -327,7 +330,7 @@ data class SpendingOverview(
     val topProducts: List<ProductSpend>,
 ) {
     val averagePurchase: Money get() = SpendMath.average(total.current, purchases)
-    val isEmpty: Boolean get() = purchases == 0L && (previousPurchases ?: 0L) == 0L
+    val isEmpty: Boolean get() = purchases == 0L && refunds.isZero && (previousPurchases ?: 0L) == 0L
 }
 
 data class CategoryAnalysis(

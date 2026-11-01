@@ -96,7 +96,21 @@ import com.pocketbudget.app.domain.model.ReconcileIssue
 import com.pocketbudget.app.domain.model.pathLabels
 import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.domain.repository.CategoryRepository
+import com.pocketbudget.app.domain.model.RefundSummary
+import com.pocketbudget.app.domain.model.RefundableItem
 import com.pocketbudget.app.domain.repository.ReceiptRepository
+import com.pocketbudget.app.domain.repository.RefundRepository
+import com.pocketbudget.app.ui.feature.refund.ItemRefundDialog
+import com.pocketbudget.app.ui.feature.refund.RefundError
+import com.pocketbudget.app.ui.feature.refund.RefundErrorText
+import com.pocketbudget.app.ui.feature.refund.refundError
+import com.pocketbudget.app.ui.feature.refund.refundStateLabel
+import androidx.compose.foundation.layout.PaddingValues
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import com.pocketbudget.app.ui.components.AmountInput
 import com.pocketbudget.app.ui.components.BackTopBar
 import com.pocketbudget.app.ui.components.ConfirmDialog
@@ -212,15 +226,20 @@ data class ReviewUiState(
     val message: Int? = null,
     val done: Boolean = false,
     val highlight: OcrSource? = null,
+    /** Refund position of the confirmed receipt's expense, per item. */
+    val refunds: RefundSummary? = null,
+    val refundError: RefundError? = null,
 )
 
 private class FormError(val messageId: Int) : Exception()
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ReceiptReviewViewModel(
     private val receipts: ReceiptRepository,
     private val accounts: AccountRepository,
     private val categories: CategoryRepository,
     val receiptId: Long,
+    private val refunds: RefundRepository? = null,
     private val dayFirst: Boolean = Locale.getDefault().country != "US",
 ) : ViewModel() {
 
@@ -254,6 +273,30 @@ class ReceiptReviewViewModel(
                     if (detail.status == ReceiptStatus.NEEDS_REVIEW || detail.status == ReceiptStatus.DRAFT) refreshChecks()
                 }
                 if (detail.status == ReceiptStatus.DRAFT && detail.ocrError == null && !_state.value.reading) read()
+            }
+        }
+        val repository = refunds
+        if (repository != null) {
+            viewModelScope.launch {
+                receipts.observeDetail(receiptId)
+                    .map { it?.transactionId }
+                    .distinctUntilChanged()
+                    .flatMapLatest { id -> if (id == null) flowOf(null) else repository.observeSummary(id) }
+                    .collect { summary -> _state.update { it.copy(refunds = summary) } }
+            }
+        }
+    }
+
+    fun refundItem(itemId: Long, quantityMilli: Long?, amount: Money?, date: LocalDate, requestId: String) {
+        val repository = refunds ?: return
+        _state.update { it.copy(refundError = null) }
+        viewModelScope.launch {
+            try {
+                repository.refundItem(itemId, quantityMilli, amount, date, requestId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(refundError = refundError(e)) }
             }
         }
     }
@@ -433,6 +476,7 @@ class ReceiptReviewViewModel(
                     container.accountRepository,
                     container.categoryRepository,
                     requireNotNull(createSavedStateHandle().get<Long>(ARG_RECEIPT_ID)),
+                    container.refundRepository,
                 )
             }
         }
@@ -526,7 +570,7 @@ fun ReceiptReviewRoute(
             }
             detail.ocrError?.let { Text(stringResource(R.string.review_ocr_failed, it), color = MaterialTheme.colorScheme.error) }
             when {
-                detail.status == ReceiptStatus.CONFIRMED -> ConfirmedSummary(detail, state.categories, onOpenTransaction)
+                detail.status == ReceiptStatus.CONFIRMED -> ConfirmedSummary(detail, state, viewModel::refundItem, onOpenTransaction)
                 state.form != null && editable -> ReviewEditor(state, viewModel, onOpenReceipt)
             }
             state.message?.let {
@@ -932,9 +976,16 @@ private fun LocationRow(location: GeoPoint?, onLocation: (GeoPoint?) -> Unit, on
 }
 
 @Composable
-private fun ConfirmedSummary(detail: ReceiptDetail, categories: List<Pair<Long, String>>, onOpenTransaction: (Long) -> Unit) {
+private fun ConfirmedSummary(
+    detail: ReceiptDetail,
+    state: ReviewUiState,
+    onRefundItem: (Long, Long?, Money?, LocalDate, String) -> Unit,
+    onOpenTransaction: (Long) -> Unit,
+) {
     val r = detail.review
-    val names = categories.toMap()
+    val names = state.categories.toMap()
+    val refundable = state.refunds?.items.orEmpty().associateBy { it.itemId }
+    var refunding by remember { mutableStateOf<RefundableItem?>(null) }
     Text(stringResource(R.string.review_confirmed_info), color = MaterialTheme.colorScheme.primary)
     Text(r.storeName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
     if (r.storeAddress.isNotBlank()) Text(r.storeAddress, style = MaterialTheme.typography.bodyMedium)
@@ -947,12 +998,26 @@ private fun ConfirmedSummary(detail: ReceiptDetail, categories: List<Pair<Long, 
                     listOfNotNull(
                         if (item.quantityMilli != 1000L || item.unit != MeasureUnit.EACH) "${QuantityText.format(item.quantityMilli)} ${item.unit.symbol}" else null,
                         item.categoryId?.let(names::get),
+                        refundable[item.id]?.let { refundStateLabel(it.state) },
                     ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                 )
+                refundable[item.id]?.takeIf { it.remaining.isPositive }?.let { position ->
+                    TextButton(onClick = { refunding = position }, contentPadding = PaddingValues(0.dp)) {
+                        Text(stringResource(R.string.refund_action))
+                    }
+                }
             }
             MoneyText(item.net)
         }
+    }
+    RefundErrorText(state.refundError)
+    refunding?.let { item ->
+        ItemRefundDialog(
+            item = item,
+            onConfirm = { quantity, amount, date, requestId -> refunding = null; onRefundItem(item.itemId, quantity, amount, date, requestId) },
+            onDismiss = { refunding = null },
+        )
     }
     if (r.discount.isPositive) SummaryRow(stringResource(R.string.field_discount), -r.discount)
     SummaryRow(stringResource(R.string.field_tax), r.tax)

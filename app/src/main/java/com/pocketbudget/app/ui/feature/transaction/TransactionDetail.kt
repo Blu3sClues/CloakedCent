@@ -42,7 +42,14 @@ import com.pocketbudget.app.domain.model.TransactionDetail
 import com.pocketbudget.app.domain.model.TransactionRevision
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
+import com.pocketbudget.app.domain.model.RefundSummary
 import com.pocketbudget.app.domain.repository.ReceiptRepository
+import com.pocketbudget.app.domain.repository.RefundRepository
+import com.pocketbudget.app.ui.feature.refund.RefundCard
+import com.pocketbudget.app.ui.feature.refund.RefundDialog
+import com.pocketbudget.app.ui.feature.refund.RefundError
+import com.pocketbudget.app.ui.feature.refund.RefundErrorText
+import com.pocketbudget.app.ui.feature.refund.refundError
 import com.pocketbudget.app.domain.repository.TransactionRepository
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -67,6 +74,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.ZoneId
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
@@ -80,6 +88,7 @@ class TransactionDetailViewModel(
     private val id: Long,
     private val transactions: TransactionRepository,
     receipts: ReceiptRepository? = null,
+    private val refunds: RefundRepository? = null,
 ) : ViewModel() {
 
     val state: StateFlow<DetailState> = transactions.observeDetail(id)
@@ -90,8 +99,33 @@ class TransactionDetailViewModel(
     val receiptId: StateFlow<Long?> = (receipts?.observeReceiptFor(id) ?: flowOf(null))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** Refund position when this is a completed expense. */
+    val refundSummary: StateFlow<RefundSummary?> = (refunds?.observeSummary(id) ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** For a refund entry: the expense it refunds. */
+    val originalId: StateFlow<Long?> = (refunds?.observeOriginal(id) ?: flowOf(null))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     private val _error = MutableStateFlow<Int?>(null)
     val error: StateFlow<Int?> = _error.asStateFlow()
+
+    private val _refundError = MutableStateFlow<RefundError?>(null)
+    val refundError: StateFlow<RefundError?> = _refundError.asStateFlow()
+
+    fun refund(amount: Money, date: LocalDate, requestId: String) {
+        val repository = refunds ?: return
+        _refundError.value = null
+        viewModelScope.launch {
+            try {
+                repository.refundTransaction(id, amount, date, requestId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _refundError.value = refundError(e)
+            }
+        }
+    }
 
     /** [actualAmount] replaces the projected amount (variable bills) in the same atomic step. */
     fun markCompleted(actualAmount: Money?) = act { transactions.confirm(id, actualAmount) }
@@ -117,6 +151,7 @@ class TransactionDetailViewModel(
                     id = createSavedStateHandle().get<Long>(TransactionEditorViewModel.ARG_TRANSACTION_ID) ?: 0L,
                     transactions = (this[APPLICATION_KEY] as PocketBudgetApp).container.transactionRepository,
                     receipts = (this[APPLICATION_KEY] as PocketBudgetApp).container.receiptRepository,
+                    refunds = (this[APPLICATION_KEY] as PocketBudgetApp).container.refundRepository,
                 )
             }
         }
@@ -128,12 +163,19 @@ fun TransactionDetailRoute(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
     onOpenReceipt: (Long) -> Unit = {},
+    onOpenTransaction: (Long) -> Unit = {},
     viewModel: TransactionDetailViewModel = viewModel(factory = TransactionDetailViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
     val receiptId by viewModel.receiptId.collectAsStateWithLifecycle()
-    TransactionDetailScreen(state, error, onBack, onEdit, viewModel::markCompleted, viewModel::delete, receiptId, onOpenReceipt)
+    val refundSummary by viewModel.refundSummary.collectAsStateWithLifecycle()
+    val originalId by viewModel.originalId.collectAsStateWithLifecycle()
+    val refundError by viewModel.refundError.collectAsStateWithLifecycle()
+    TransactionDetailScreen(
+        state, error, onBack, onEdit, viewModel::markCompleted, viewModel::delete, receiptId, onOpenReceipt,
+        RefundUi(refundSummary, originalId, refundError, viewModel::refund, onOpenTransaction),
+    )
 }
 
 @Composable
@@ -146,14 +188,17 @@ fun TransactionDetailScreen(
     onDelete: () -> Unit,
     receiptId: Long? = null,
     onOpenReceipt: (Long) -> Unit = {},
+    refund: RefundUi = RefundUi(),
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
+    var refunding by remember { mutableStateOf(false) }
     var confirmAmount by remember { mutableStateOf<String?>(null) }
     val detail = (state as? DetailState.Loaded)?.detail
     Scaffold(
         topBar = {
             BackTopBar(stringResource(R.string.transaction_detail_title), onBack) {
-                if (detail != null && !detail.isDeleted) {
+                // Refunds are fixed once recorded (delete and record again instead).
+                if (detail != null && !detail.isDeleted && detail.type != TransactionType.REFUND) {
                     IconButton(onClick = { onEdit(detail.id) }) {
                         Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.action_edit))
                     }
@@ -175,6 +220,16 @@ fun TransactionDetailScreen(
                         OutlinedButton(onClick = { onOpenReceipt(id) }, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.receipt_view))
                         }
+                    }
+                    refund.originalId?.let { original ->
+                        Text(stringResource(R.string.refund_of), style = MaterialTheme.typography.bodyMedium)
+                        OutlinedButton(onClick = { refund.onOpenTransaction(original) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.refund_open_original))
+                        }
+                    }
+                    refund.summary?.let { summary ->
+                        RefundCard(summary, onRefund = { refunding = true }, onOpenRefund = refund.onOpenTransaction)
+                        RefundErrorText(refund.error)
                     }
                     if (!state.detail.isDeleted) {
                         if (state.detail.status.isScheduled) {
@@ -215,6 +270,14 @@ fun TransactionDetailScreen(
             dismissButton = { TextButton(onClick = { confirmAmount = null }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
+    val summary = refund.summary
+    if (refunding && summary != null) {
+        RefundDialog(
+            remaining = summary.remaining,
+            onConfirm = { amount, date, requestId -> refunding = false; refund.onRefund(amount, date, requestId) },
+            onDismiss = { refunding = false },
+        )
+    }
     if (confirmDelete) {
         ConfirmDialog(
             title = stringResource(R.string.confirm_delete_title),
@@ -227,6 +290,15 @@ fun TransactionDetailScreen(
         )
     }
 }
+
+/** Refund state and actions for the detail screen; empty when not applicable. */
+class RefundUi(
+    val summary: RefundSummary? = null,
+    val originalId: Long? = null,
+    val error: RefundError? = null,
+    val onRefund: (Money, LocalDate, String) -> Unit = { _, _, _ -> },
+    val onOpenTransaction: (Long) -> Unit = {},
+)
 
 @Composable
 private fun SummaryCard(detail: TransactionDetail) {

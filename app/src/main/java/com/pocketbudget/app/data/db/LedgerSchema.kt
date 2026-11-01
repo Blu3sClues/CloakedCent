@@ -22,6 +22,8 @@ object LedgerSchema {
             AND NEW.status IN ('SCHEDULED', 'COMPLETED'))
         OR (NEW.type = 'ADJUSTMENT' AND NEW.amount_cents <> 0 AND NEW.transfer_id IS NULL
             AND NEW.category_id IS NULL AND NEW.is_adjustment = 1 AND NEW.status = 'COMPLETED')
+        OR (NEW.type = 'REFUND' AND NEW.amount_cents > 0 AND NEW.transfer_id IS NULL
+            AND NEW.is_adjustment = 0 AND NEW.status = 'RECEIVED')
     """
 
     /** Triggers whose SQL changed in a later schema version; migrations drop them so onOpen recreates them. */
@@ -158,8 +160,79 @@ object LedgerSchema {
         """,
     )
 
+    /** Live refunds already recorded against expense `:id` (as an SQL expression on `id`). */
+    private fun refundedOf(id: String) = """
+        (SELECT COALESCE(SUM(rt.amount_cents), 0) FROM refunds rf
+            JOIN transactions rt ON rt.id = rf.refund_transaction_id
+            WHERE rf.original_transaction_id = $id AND rt.is_deleted = 0)
+    """
+
+    /**
+     * v7 refund rules. A refund links a live REFUND entry to a completed, live expense
+     * and can never take more than what is still refundable. Refunded expenses cannot be
+     * deleted or reduced below what was refunded; refund amounts never change. Links and
+     * allocations are append-only, and allocations never exceed their refund.
+     */
+    private val REFUND_TRIGGERS = listOf(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_refunds_validate_insert
+        BEFORE INSERT ON refunds
+        WHEN NOT EXISTS (SELECT 1 FROM transactions o WHERE o.id = NEW.original_transaction_id
+                AND o.type = 'EXPENSE' AND o.status = 'SPENT' AND o.is_deleted = 0 AND o.is_adjustment = 0)
+            OR NOT EXISTS (SELECT 1 FROM transactions r WHERE r.id = NEW.refund_transaction_id
+                AND r.type = 'REFUND' AND r.is_deleted = 0)
+            OR ${refundedOf("NEW.original_transaction_id")}
+                + (SELECT amount_cents FROM transactions WHERE id = NEW.refund_transaction_id)
+                > (SELECT -amount_cents FROM transactions WHERE id = NEW.original_transaction_id)
+        BEGIN SELECT RAISE(ABORT, 'refund violates ledger rules'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_refunds_immutable_update
+        BEFORE UPDATE ON refunds
+        BEGIN SELECT RAISE(ABORT, 'refunds are immutable'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_refunds_immutable_delete
+        BEFORE DELETE ON refunds
+        BEGIN SELECT RAISE(ABORT, 'refunds are immutable'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_refund_allocations_validate_insert
+        BEFORE INSERT ON refund_allocations
+        WHEN NEW.amount_cents <= 0 OR NEW.item_net_cents < 0 OR NEW.quantity_milli <= 0
+            OR NOT EXISTS (SELECT 1 FROM transactions r WHERE r.id = NEW.refund_transaction_id AND r.type = 'REFUND')
+            OR (SELECT COALESCE(SUM(amount_cents), 0) FROM refund_allocations
+                WHERE refund_transaction_id = NEW.refund_transaction_id) + NEW.amount_cents
+                > (SELECT amount_cents FROM transactions WHERE id = NEW.refund_transaction_id)
+            OR (NEW.receipt_item_id IS NOT NULL AND (
+                SELECT COALESCE(SUM(a.item_net_cents), 0) FROM refund_allocations a
+                    JOIN transactions rt ON rt.id = a.refund_transaction_id
+                    WHERE a.receipt_item_id = NEW.receipt_item_id AND rt.is_deleted = 0)
+                + COALESCE(NEW.item_net_cents, 0)
+                > (SELECT line_total_cents - discount_cents FROM receipt_items WHERE id = NEW.receipt_item_id))
+        BEGIN SELECT RAISE(ABORT, 'refund allocation violates ledger rules'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_refund_allocations_immutable_update
+        BEFORE UPDATE ON refund_allocations
+        BEGIN SELECT RAISE(ABORT, 'refund allocations are immutable'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_refund_allocations_immutable_delete
+        BEFORE DELETE ON refund_allocations
+        BEGIN SELECT RAISE(ABORT, 'refund allocations are immutable'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_transactions_refund_protect
+        BEFORE UPDATE ON transactions
+        WHEN (OLD.type = 'REFUND' AND NEW.amount_cents <> OLD.amount_cents)
+            OR (OLD.type = 'EXPENSE' AND NEW.is_deleted = 1 AND OLD.is_deleted = 0 AND ${refundedOf("OLD.id")} > 0)
+            OR (OLD.type = 'EXPENSE' AND -NEW.amount_cents < ${refundedOf("OLD.id")})
+        BEGIN SELECT RAISE(ABORT, 'refunded expense or refund cannot change this way'); END
+        """,
+    )
     fun createTriggers(db: SupportSQLiteDatabase) {
-        (TRIGGERS + RECEIPT_TRIGGERS).forEach(db::execSQL)
+        (TRIGGERS + RECEIPT_TRIGGERS + REFUND_TRIGGERS).forEach(db::execSQL)
     }
 
     /** Starter categories; parents listed before children. */

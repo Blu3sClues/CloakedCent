@@ -8,6 +8,7 @@ import com.pocketbudget.app.data.db.dao.AnalysisDao
 import com.pocketbudget.app.data.db.dao.AppMetadataDao
 import com.pocketbudget.app.data.db.dao.BudgetDao
 import com.pocketbudget.app.data.db.dao.ReceiptDao
+import com.pocketbudget.app.data.db.dao.RefundDao
 import com.pocketbudget.app.data.db.dao.RecurringDao
 import com.pocketbudget.app.data.db.dao.CategoryDao
 import com.pocketbudget.app.data.db.dao.PayeeDao
@@ -26,6 +27,8 @@ import com.pocketbudget.app.data.db.entity.ReceiptItemEntity
 import com.pocketbudget.app.data.db.entity.ReceiptOcrLineEntity
 import com.pocketbudget.app.data.db.entity.StoreEntity
 import com.pocketbudget.app.data.db.entity.TransactionSplitEntity
+import com.pocketbudget.app.data.db.entity.RefundAllocationEntity
+import com.pocketbudget.app.data.db.entity.RefundEntity
 import com.pocketbudget.app.data.db.entity.RecurringOccurrenceEntity
 import com.pocketbudget.app.data.db.entity.RecurringScheduleEntity
 import com.pocketbudget.app.data.db.entity.CategoryEntity
@@ -61,8 +64,10 @@ import com.pocketbudget.app.data.db.entity.TransferEntity
         ProductAliasEntity::class,
         PriceObservationEntity::class,
         TransactionSplitEntity::class,
+        RefundEntity::class,
+        RefundAllocationEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -77,6 +82,7 @@ abstract class PocketBudgetDatabase : RoomDatabase() {
     abstract fun recurringDao(): RecurringDao
     abstract fun receiptDao(): ReceiptDao
     abstract fun analysisDao(): AnalysisDao
+    abstract fun refundDao(): RefundDao
 
     companion object {
         const val NAME = "pocket_budget.db"

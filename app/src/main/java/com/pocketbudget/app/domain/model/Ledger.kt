@@ -53,12 +53,18 @@ enum class TransactionType {
     TRANSFER,
 
     /** Balance correction excluded from income/expense reports. Never scheduled. */
-    ADJUSTMENT;
+    ADJUSTMENT,
+
+    /**
+     * Money returned for an earlier expense (positive). Linked to that expense; reduces
+     * net spending, is never income and never a new purchase. Never scheduled.
+     */
+    REFUND;
 
     /** The status an entry of this type has once the money has actually moved. */
     val completedStatus: TransactionStatus
         get() = when (this) {
-            INCOME -> TransactionStatus.RECEIVED
+            INCOME, REFUND -> TransactionStatus.RECEIVED
             EXPENSE -> TransactionStatus.SPENT
             TRANSFER, ADJUSTMENT -> TransactionStatus.COMPLETED
         }
@@ -157,6 +163,8 @@ data class TransactionListItem(
     val payeeName: String?,
     val counterpartAccountName: String?,
     val isAdjustment: Boolean = false,
+    /** Live refunds recorded against this expense (positive). */
+    val refunded: Money = Money.ZERO,
 )
 
 /** Confirmed income and expense for a period. Transfers are excluded by definition. */

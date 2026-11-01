@@ -148,7 +148,7 @@ class RoomReceiptRepository(
         write { db ->
             val dao = db.receiptDao()
             val receipt = dao.getById(id)?.takeIf { it.isEditable } ?: return@write
-            val store = dao.findStores(TextKeys.normalize(parsed.review.storeName)).firstOrNull()
+            val store = dao.findStores(TextKeys.storeKey(parsed.review.storeName)).firstOrNull()
             val review = parsed.review.copy(
                 items = suggestProducts(db, store?.id, parsed.review.items),
                 defaultCategoryId = store?.let { dao.lastDefaultCategory(it.id) },
@@ -439,7 +439,7 @@ class RoomReceiptRepository(
         val dao = db.receiptDao()
         val name = review.storeName.trim()
         val address = review.storeAddress.trim().ifEmpty { null }
-        val existing = dao.findStores(TextKeys.normalize(name)).firstOrNull { store ->
+        val existing = dao.findStores(TextKeys.storeKey(name)).firstOrNull { store ->
             address == null || store.address == null || TextKeys.normalize(store.address) == TextKeys.normalize(address)
         }
         val payeeId = existing?.payeeId ?: payees.getOrCreate(name)
@@ -457,7 +457,7 @@ class RoomReceiptRepository(
         }
         val store = StoreEntity(
             name = name,
-            normalizedName = TextKeys.normalize(name),
+            normalizedName = TextKeys.storeKey(name),
             address = address,
             latitudeE7 = review.location?.latitudeE7,
             longitudeE7 = review.location?.longitudeE7,

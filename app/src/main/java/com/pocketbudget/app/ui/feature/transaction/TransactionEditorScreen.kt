@@ -218,6 +218,7 @@ fun typeLabel(type: TransactionType): Int = when (type) {
     TransactionType.EXPENSE -> R.string.type_expense
     TransactionType.TRANSFER -> R.string.type_transfer
     TransactionType.ADJUSTMENT -> R.string.type_adjustment
+    TransactionType.REFUND -> R.string.type_refund
 }
 
 fun statusLabel(status: TransactionStatus): Int = when (status) {
@@ -231,5 +232,5 @@ fun statusLabel(status: TransactionStatus): Int = when (status) {
 fun markCompletedLabel(type: TransactionType): Int = when (type) {
     TransactionType.INCOME -> R.string.action_mark_received
     TransactionType.EXPENSE -> R.string.action_mark_spent
-    TransactionType.TRANSFER, TransactionType.ADJUSTMENT -> R.string.action_mark_completed
+    TransactionType.TRANSFER, TransactionType.ADJUSTMENT, TransactionType.REFUND -> R.string.action_mark_completed
 }

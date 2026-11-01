@@ -161,6 +161,7 @@ private fun LazyListScope.overviewItems(overview: SpendingOverview, period: Anal
         TotalCard(stringResource(R.string.analysis_total_spent), overview.total) {
             StatRow(stringResource(R.string.analysis_purchases), overview.purchases.toString())
             StatRow(stringResource(R.string.analysis_average_purchase), AmountInput.format(overview.averagePurchase))
+            if (overview.refunds.isPositive) StatRow(stringResource(R.string.analysis_refunds), "−" + AmountInput.format(overview.refunds))
         }
     }
     item { SectionCard(stringResource(R.string.analysis_trend)) { TrendChart(overview.trend, period.range) } }

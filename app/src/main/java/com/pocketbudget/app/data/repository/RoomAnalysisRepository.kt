@@ -62,17 +62,47 @@ class RoomAnalysisRepository(
     private fun categoryAmounts(range: DateRange): Flow<Map<Long?, Money>> =
         dao { observeCategories(range.start, range.endInclusive) }.map { rows -> rows.associate { it.toPair() } }
 
+    /** Locations with visits, net of refunds; a store with only refunds in the range appears with no visits. */
     private fun locations(range: DateRange): Flow<List<LocationSpend>> =
-        dao { observeLocations(range.start, range.endInclusive) }.map { rows -> rows.map { it.toDomain() } }
+        combine(
+            dao { observeLocations(range.start, range.endInclusive) },
+            dao { observeStoreRefunds(range.start, range.endInclusive) },
+        ) { rows, refunds ->
+            val refunded = refunds.associateBy { it.storeId }
+            val visited = rows.map { row -> row.toDomain().let { it.copy(total = it.total - Money(refunded[row.storeId]?.cents ?: 0)) } }
+            val ids = rows.map { it.storeId }.toSet()
+            visited + refunds.filter { it.storeId !in ids }.map {
+                LocationSpend(it.storeId, it.name, it.normalizedName.ifBlank { TextKeys.storeKey(it.name) }, it.address, 0, -Money(it.cents), null, null)
+            }
+        }
 
+    /** Product spending net of item refunds; refunds never add purchases. */
     private fun products(range: DateRange, storeIds: List<Long>? = null, categoryIds: List<Long>? = null): Flow<List<ProductSpend>> =
+        combine(
+            dao {
+                observeProducts(
+                    range.start, range.endInclusive,
+                    anyStore = storeIds == null, storeIds = storeIds.orEmpty(),
+                    anyCategory = categoryIds == null, categoryIds = categoryIds.orEmpty(),
+                )
+            },
+            productRefunds(range, storeIds, categoryIds),
+        ) { rows, refunds ->
+            val refunded = refunds.associateBy { it.productId }
+            val bought = rows.map { row -> ProductSpend(row.productId, row.name, row.purchases, Money(row.cents - (refunded[row.productId]?.cents ?: 0))) }
+            val ids = rows.map { it.productId }.toSet()
+            (bought + refunds.filter { it.productId !in ids }.map { ProductSpend(it.productId, it.name, 0, -Money(it.cents)) })
+                .sortedWith(compareByDescending<ProductSpend> { it.total.cents }.thenBy { it.name })
+        }
+
+    private fun productRefunds(range: DateRange, storeIds: List<Long>? = null, categoryIds: List<Long>? = null) =
         dao {
-            observeProducts(
+            observeProductRefunds(
                 range.start, range.endInclusive,
                 anyStore = storeIds == null, storeIds = storeIds.orEmpty(),
                 anyCategory = categoryIds == null, categoryIds = categoryIds.orEmpty(),
             )
-        }.map { rows -> rows.map { it.toDomain() } }
+        }
 
     private fun pricePoints(range: DateRange, productId: Long? = null, storeIds: List<Long>? = null): Flow<List<PricePointRow>> =
         dao {
@@ -102,6 +132,7 @@ class RoomAnalysisRepository(
             SpendingOverview(
                 period = period,
                 total = Comparison(Money(current.cents), previous?.let { Money(it.cents) }),
+                refunds = Money(current.refundedCents),
                 purchases = current.purchases,
                 previousPurchases = previous?.purchases,
                 trend = trend,
@@ -200,7 +231,8 @@ class RoomAnalysisRepository(
 
     override fun observeProduct(productId: Long, period: AnalysisPeriod): Flow<ProductAnalysis?> {
         val product = observe { db -> db.receiptDao().observeProducts().map { list -> list.firstOrNull { it.id == productId } } }
-        return combine(product, pricePoints(period.range, productId = productId)) { entity, rows ->
+        val refunds = productRefunds(period.range).map { rows -> Money(rows.firstOrNull { it.productId == productId }?.cents ?: 0) }
+        return combine(product, pricePoints(period.range, productId = productId), refunds) { entity, rows, refunded ->
             entity ?: return@combine null
             val history = rows.map { it.toDomain() }
             val paid = history.fold(Money.ZERO) { sum, it -> sum + it.paid }
@@ -210,7 +242,7 @@ class RoomAnalysisRepository(
             val highest = if (priced.isNotEmpty()) priced.maxBy { it.normalized!!.milliCentsPerUnit } else history.maxByOrNull { it.paid.cents }
             ProductAnalysis(
                 product = entity.toDomain(),
-                spend = ProductSpend(productId, entity.name, history.size.toLong(), paid),
+                spend = ProductSpend(productId, entity.name, history.size.toLong(), paid - refunded),
                 history = history,
                 averageDaysBetween = PriceAnalysis.averageDaysBetween(history),
                 overall = PriceAnalysis.stats(entity.name, productId.toString(), history),
@@ -228,15 +260,13 @@ private fun CategorySpendRow.toPair(): Pair<Long?, Money> = categoryId to Money(
 private fun LocationSpendRow.toDomain() = LocationSpend(
     storeId = storeId,
     name = name,
-    brandKey = normalizedName.ifBlank { TextKeys.normalize(name) },
+    brandKey = normalizedName.ifBlank { TextKeys.storeKey(name) },
     address = address,
     visits = visits,
     total = Money(cents),
     firstVisit = firstVisit,
     lastVisit = lastVisit,
 )
-
-private fun ProductSpendRow.toDomain() = ProductSpend(productId, name, purchases, Money(cents))
 
 private fun PricePointRow.toDomain() = PricePoint(
     date = day,

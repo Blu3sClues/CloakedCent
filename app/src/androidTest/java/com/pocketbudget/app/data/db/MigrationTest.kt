@@ -324,6 +324,60 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate6To7AddsRefundsAndRekeysNamesWithoutMerging() = runTest {
+        helper.createDatabase(TEST_DB, 6).apply {
+            execSQL(
+                """
+                INSERT INTO accounts (id, name, type, opening_balance_cents, include_in_totals, is_archived, created_at, updated_at)
+                VALUES (1, 'Checking', 'CHECKING', 10000, 1, 0, 0, 0)
+                """,
+            )
+            execSQL(
+                """
+                INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on,
+                    revision, is_deleted, is_adjustment, created_at, updated_at)
+                VALUES (1, 'r1', 1, 'EXPENSE', -2500, 'SPENT', 20400, 1, 0, 0, 0, 0)
+                """,
+            )
+            // v6 keys: spacing and format words differed, so these were separate.
+            execSQL("INSERT INTO stores (id, name, normalized_name, created_at, updated_at) VALUES (1, 'Walmart Supercenter', 'WALMART SUPERCENTER', 0, 0)")
+            execSQL("INSERT INTO stores (id, name, normalized_name, created_at, updated_at) VALUES (2, 'WAL-MART', 'WAL MART', 0, 0)")
+            execSQL("INSERT INTO stores (id, name, normalized_name, created_at, updated_at) VALUES (3, 'Walgreens', 'WALGREENS', 0, 0)")
+            execSQL("INSERT INTO products (id, name, normalized_name, created_at, updated_at) VALUES (1, 'Milk 1 L', 'MILK 1 L', 0, 0)")
+            execSQL("INSERT INTO products (id, name, normalized_name, created_at, updated_at) VALUES (2, 'MILK 1L', 'MILK 1L', 0, 0)")
+            execSQL("INSERT INTO products (id, name, normalized_name, created_at, updated_at) VALUES (3, 'Milk 2L', 'MILK 2L', 0, 0)")
+            execSQL("INSERT INTO product_aliases (id, store_id, normalized_alias, product_id, times_confirmed, created_at, updated_at) VALUES (1, 1, 'GV MLK 1 LTR', 1, 3, 0, 0)")
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 7, true, Migrations.MIGRATION_6_7).apply {
+            fun strings(sql: String) = query(sql).use { c -> generateSequence { if (c.moveToNext()) c.getString(0) else null }.toList() }
+            assertEquals(listOf("WALMART", "WALMART", "WALGREENS"), strings("SELECT normalized_name FROM stores ORDER BY id"))
+            // Same product spelled two ways: both kept (history untouched), the later one with a unique key.
+            assertEquals(listOf("MILK 1L", "MILK 1L~2", "MILK 2L"), strings("SELECT normalized_name FROM products ORDER BY id"))
+            assertEquals(listOf("GV MLK 1L"), strings("SELECT normalized_alias FROM product_aliases"))
+            assertEquals(listOf("0"), strings("SELECT COUNT(*) FROM refunds"))
+            close()
+        }
+        val db = PocketBudgetDatabaseFactory.create(context, passphrase, name = TEST_DB)
+        helper.closeWhenFinished(db)
+        assertEquals(Money(7_500), RoomAccountRepository({ db }).observeBalances().first().single().current)
+        // v7 triggers are installed on open: refunds beyond the expense are refused.
+        val writable = db.openHelper.writableDatabase
+        writable.execSQL(
+            "INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on, revision, is_deleted, is_adjustment, created_at, updated_at) VALUES (2, 'f', 1, 'REFUND', 3000, 'RECEIVED', 20401, 1, 0, 0, 0, 0)",
+        )
+        assertTrue(runCatching { writable.execSQL("INSERT INTO refunds (refund_transaction_id, original_transaction_id, created_at) VALUES (2, 1, 0)") }.isFailure)
+        // Scheduled refunds are not valid entries.
+        assertTrue(
+            runCatching {
+                writable.execSQL(
+                    "INSERT INTO transactions (request_id, account_id, type, amount_cents, status, occurred_on, revision, is_deleted, is_adjustment, created_at, updated_at) VALUES ('g', 1, 'REFUND', 100, 'SCHEDULED', 20401, 1, 0, 0, 0, 0)",
+                )
+            }.isFailure,
+        )
+    }
+
+    @Test
     fun migrateFromFirstVersionToLatest() = runTest {
         helper.createDatabase(TEST_DB, FIRST_VERSION).apply {
             execSQL(

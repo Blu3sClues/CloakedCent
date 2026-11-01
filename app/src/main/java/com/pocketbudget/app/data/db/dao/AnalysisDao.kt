@@ -18,10 +18,16 @@ private const val SPENDING = """
     AND t.occurred_on BETWEEN :from AND :to
 """
 
+/** Live refund entries, aliased `t`, dated in [:from, :to]. They reduce spending on their own date. */
+private const val REFUNDING = """
+    t.type = 'REFUND' AND t.is_deleted = 0 AND t.occurred_on BETWEEN :from AND :to
+"""
+
 /**
  * Spending by category: split expenses through their splits, the rest (and any part
  * not covered by splits) under the expense's own category, NULL when uncategorised.
- * Each cent of an expense appears in exactly one row.
+ * Each cent of an expense appears in exactly one row; refunds appear as negative rows
+ * in the categories they were allocated to.
  */
 private const val CATEGORY_PARTS = """
     SELECT t.occurred_on AS day, s.category_id AS category_id, s.amount_cents AS cents
@@ -34,6 +40,10 @@ private const val CATEGORY_PARTS = """
                 WHERE transaction_id = t.id) AS cents
         FROM transactions t WHERE $SPENDING
     ) WHERE cents > 0
+    UNION ALL
+    SELECT t.occurred_on AS day, a.category_id AS category_id, -a.amount_cents AS cents
+    FROM refund_allocations a JOIN transactions t ON t.id = a.refund_transaction_id
+    WHERE $REFUNDING
 """
 
 /** Confirmed receipts whose expense counts as spending; one row per expense. */
@@ -42,6 +52,15 @@ private const val RECEIPT_SPENDING = """
     JOIN transactions t ON t.id = r.transaction_id
     JOIN stores st ON st.id = r.store_id
     WHERE r.status = 'CONFIRMED' AND $SPENDING
+"""
+
+/** Refunds of confirmed receipts' expenses, with the receipt's store aliased `st`. */
+private const val STORE_REFUNDS = """
+    FROM refunds rf
+    JOIN transactions t ON t.id = rf.refund_transaction_id
+    JOIN receipts r ON r.transaction_id = rf.original_transaction_id AND r.status = 'CONFIRMED'
+    JOIN stores st ON st.id = r.store_id
+    WHERE $REFUNDING
 """
 
 /** Confirmed purchased items whose receipt's expense counts as spending; one row per item. */
@@ -55,7 +74,18 @@ private const val ITEM_SPENDING = """
     WHERE r.status = 'CONFIRMED' AND $SPENDING
 """
 
-data class SpendTotalRow(val purchases: Long, val cents: Long)
+/** [cents] is net of refunds; [refundedCents] is the refunds alone. Refunds are never purchases. */
+data class SpendTotalRow(val purchases: Long, val cents: Long, @ColumnInfo(name = "refunded_cents") val refundedCents: Long)
+
+data class StoreRefundRow(
+    @ColumnInfo(name = "store_id") val storeId: Long,
+    val name: String,
+    @ColumnInfo(name = "normalized_name") val normalizedName: String,
+    val address: String?,
+    val cents: Long,
+)
+
+data class ProductRefundRow(@ColumnInfo(name = "product_id") val productId: Long, val name: String, val cents: Long)
 
 data class DailySpendRow(val day: LocalDate, val cents: Long)
 
@@ -98,10 +128,25 @@ data class PricePointRow(
 @Dao
 interface AnalysisDao {
 
-    @Query("SELECT COUNT(*) AS purchases, COALESCE(SUM(-t.amount_cents), 0) AS cents FROM transactions t WHERE $SPENDING")
+    @Query(
+        """
+        SELECT (SELECT COUNT(*) FROM transactions t WHERE $SPENDING) AS purchases,
+            (SELECT COALESCE(SUM(-t.amount_cents), 0) FROM transactions t WHERE $SPENDING)
+                - (SELECT COALESCE(SUM(t.amount_cents), 0) FROM transactions t WHERE $REFUNDING) AS cents,
+            (SELECT COALESCE(SUM(t.amount_cents), 0) FROM transactions t WHERE $REFUNDING) AS refunded_cents
+        """,
+    )
     fun observeTotals(from: LocalDate, to: LocalDate): Flow<SpendTotalRow>
 
-    @Query("SELECT t.occurred_on AS day, SUM(-t.amount_cents) AS cents FROM transactions t WHERE $SPENDING GROUP BY t.occurred_on")
+    @Query(
+        """
+        SELECT day, SUM(cents) AS cents FROM (
+            SELECT t.occurred_on AS day, -t.amount_cents AS cents FROM transactions t WHERE $SPENDING
+            UNION ALL
+            SELECT t.occurred_on AS day, -t.amount_cents AS cents FROM transactions t WHERE $REFUNDING
+        ) GROUP BY day
+        """,
+    )
     fun observeDaily(from: LocalDate, to: LocalDate): Flow<List<DailySpendRow>>
 
     @Query("SELECT category_id, SUM(cents) AS cents FROM ($CATEGORY_PARTS) GROUP BY category_id")
@@ -120,7 +165,15 @@ interface AnalysisDao {
     )
     fun observeLocations(from: LocalDate, to: LocalDate): Flow<List<LocationSpendRow>>
 
-    @Query("SELECT t.occurred_on AS day, SUM(-t.amount_cents) AS cents $RECEIPT_SPENDING AND st.id IN (:storeIds) GROUP BY t.occurred_on")
+    @Query(
+        """
+        SELECT day, SUM(cents) AS cents FROM (
+            SELECT t.occurred_on AS day, -t.amount_cents AS cents $RECEIPT_SPENDING AND st.id IN (:storeIds)
+            UNION ALL
+            SELECT t.occurred_on AS day, -t.amount_cents AS cents $STORE_REFUNDS AND st.id IN (:storeIds)
+        ) GROUP BY day
+        """,
+    )
     fun observeStoreDaily(from: LocalDate, to: LocalDate, storeIds: List<Long>): Flow<List<DailySpendRow>>
 
     /**
@@ -146,6 +199,33 @@ interface AnalysisDao {
         anyCategory: Boolean,
         categoryIds: List<Long>,
     ): Flow<List<ProductSpendRow>>
+
+    @Query("SELECT st.id AS store_id, st.name, st.normalized_name, st.address, SUM(t.amount_cents) AS cents $STORE_REFUNDS GROUP BY st.id")
+    fun observeStoreRefunds(from: LocalDate, to: LocalDate): Flow<List<StoreRefundRow>>
+
+    /** Pre-tax item value refunded per product, with the same optional filters as [observeProducts]. */
+    @Query(
+        """
+        SELECT p.product_id, pr.name, SUM(a.item_net_cents) AS cents
+        FROM refund_allocations a
+        JOIN transactions t ON t.id = a.refund_transaction_id
+        JOIN price_observations p ON p.receipt_item_id = a.receipt_item_id
+        JOIN receipt_items i ON i.id = a.receipt_item_id
+        JOIN products pr ON pr.id = p.product_id
+        WHERE $REFUNDING AND a.item_net_cents IS NOT NULL
+            AND (:anyStore OR p.store_id IN (:storeIds))
+            AND (:anyCategory OR i.category_id IN (:categoryIds))
+        GROUP BY p.product_id
+        """,
+    )
+    fun observeProductRefunds(
+        from: LocalDate,
+        to: LocalDate,
+        anyStore: Boolean,
+        storeIds: List<Long>,
+        anyCategory: Boolean,
+        categoryIds: List<Long>,
+    ): Flow<List<ProductRefundRow>>
 
     /** Purchases with prices: one product ([anyProduct] false) and/or a set of stores ([anyStore] false). */
     @Query(

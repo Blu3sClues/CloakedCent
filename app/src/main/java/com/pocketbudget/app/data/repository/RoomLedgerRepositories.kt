@@ -267,6 +267,10 @@ class RoomTransactionRepository(
     override suspend fun edit(id: Long, edit: TransactionEdit) = write { db ->
         requirePositive(edit.amount)
         val current = requireLive(db, id)
+        if (current.type == TransactionType.REFUND) {
+            // A refund's amount is fixed by its allocations; delete it and record a new one instead.
+            throw LedgerException.InvalidOperation("Refunds cannot be edited")
+        }
         if (current.type == TransactionType.TRANSFER) {
             if (edit.categoryId != null || edit.payeeId != null) {
                 throw LedgerException.InvalidOperation("Transfers have no category or payee")
@@ -315,6 +319,9 @@ class RoomTransactionRepository(
 
     override suspend fun delete(id: Long) = write { db ->
         val current = db.transactionDao().getById(id) ?: throw LedgerException.NotFound("Transaction $id")
+        if (current.type == TransactionType.EXPENSE && !current.isDeleted && db.refundDao().refundedTotal(id) > 0) {
+            throw LedgerException.InvalidOperation("Delete this expense's refunds first")
+        }
         for (entry in legsOf(db, current)) {
             if (!entry.isDeleted) applyChange(db, entry, entry.copy(isDeleted = true), RevisionAction.DELETE)
         }
@@ -447,6 +454,7 @@ class RoomTransactionRepository(
         payeeName = payeeName,
         counterpartAccountName = counterpartAccountName,
         isAdjustment = isAdjustment,
+        refunded = Money(refundedCents),
     )
 
     private fun escapeLike(text: String) =

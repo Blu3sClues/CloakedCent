@@ -259,6 +259,35 @@ so every balance comes from a single source and nothing can be double counted.
   The price is in thousandths of a cent, calculated with exact integer
   arithmetic; lb, g and ml are converted. This is the data for Stage 7 price alerts.
 
+### Refunds (schema v7)
+
+- **How a refund is recorded.** A refund is a new `REFUND` ledger entry: money back
+  into the original account, linked through `refunds` to the expense it refunds. The
+  expense itself is never modified.
+- **Whole-expense refunds.** These can be full or partial, repeated until nothing is
+  left to refund.
+- **Item refunds.** For a confirmed receipt, single items can be refunded by quantity
+  or by amount. The amount is priced from the item's share of what was paid (tax
+  included), and the last unit returns exactly what is left.
+- **Allocations.** `refund_allocations` records where each refund comes off spending:
+  the category, plus the item for receipts (a whole-expense refund on a receipt is
+  spread across items still refundable). The allocations add up exactly to the
+  refund.
+- **Effect on totals.** Budgets, the dashboard's spending total and the analysis
+  subtract refunds on the refund date. Refunds are never income and never count as
+  purchases.
+- **Enforcement.** Triggers keep refunds within what is still refundable, make
+  refunds and allocations append-only, and stop a refunded expense from being
+  deleted or reduced below the refunded amount.
+- **Idempotency.** Each refund has a unique request id. Deleting a refund entry (it
+  stays in the audit history) makes its amount refundable again.
+- **Name keys.** Store keys ignore case, spacing, punctuation, a leading "The",
+  store numbers and format words such as "Supercenter" or "Inc"; "Wal-Mart" and
+  "WALMART SUPERCENTER #12" both become `WALMART`. Product keys also unify how sizes
+  are written ("1 LTR" = "1L"). Different words, brands, variants and sizes always
+  stay different, and fuzzy product suggestions never cross sizes. Migration 6→7
+  recomputes existing keys without merging records: a product whose new key clashes
+  keeps a unique suffixed key.
 ### Spending analysis
 
 - **Screens.** An overview, categories, stores (retailers and their locations) and
