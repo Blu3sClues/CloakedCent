@@ -9,6 +9,7 @@ import com.pocketbudget.app.domain.model.TransactionFilter
 import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.Category
 import com.pocketbudget.app.domain.model.CategoryKind
+import com.pocketbudget.app.domain.model.NewAdjustment
 import com.pocketbudget.app.domain.model.NewTransaction
 import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.PayeeType
@@ -79,8 +80,14 @@ interface TransactionRepository {
     /** Soft-deletes an entry (both legs for transfers), keeping it in history. */
     suspend fun delete(id: Long)
 
-    /** SCHEDULED -> SPENT (both legs for transfers). Returns false if already spent, so repeats are harmless. */
+    /**
+     * SCHEDULED -> the type's completed status (Received / Spent / Completed), both
+     * legs atomically for transfers. Returns false if not scheduled, so repeats are harmless.
+     */
     suspend fun confirm(id: Long): Boolean
+
+    /** Records a balance correction as a new ledger entry; idempotent on requestId. Returns the entry id. */
+    suspend fun adjustBalance(adjustment: NewAdjustment): Long
 
     /** Most recent entries; transfers appear once (outgoing leg). */
     fun observeRecent(limit: Int): Flow<List<TransactionListItem>>

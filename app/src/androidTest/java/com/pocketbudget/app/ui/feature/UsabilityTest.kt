@@ -108,7 +108,7 @@ class UsabilityTest {
                     title = "Holiday fund",
                     onEditAccount = { edits++ },
                     onBack = {}, onOpen = {}, onQueryChange = {}, onAccount = {}, onCategory = {},
-                    onPayee = {}, onDates = { _, _ -> }, onClear = {},
+                    onPayee = {}, onScheduled = {}, onDates = { _, _ -> }, onClear = {},
                 )
             }
         }

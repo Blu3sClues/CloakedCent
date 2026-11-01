@@ -132,6 +132,7 @@ fun ledgerErrorMessage(error: Throwable): Int = when (error) {
     is LedgerException.CategoryMismatch -> R.string.error_category_mismatch
     is LedgerException.SameAccountTransfer -> R.string.error_same_account
     is LedgerException.AccountHasBalance -> R.string.error_account_has_balance
+    is LedgerException.AdjustmentKindMismatch -> R.string.error_adjustment_kind
     is LedgerException.NotFound -> R.string.error_not_found
     is LedgerException.InvalidOperation -> R.string.error_not_allowed
     else -> R.string.error_unexpected

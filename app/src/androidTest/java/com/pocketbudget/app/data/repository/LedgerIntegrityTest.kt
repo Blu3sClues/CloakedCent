@@ -33,7 +33,7 @@ class LedgerIntegrityTest {
         type: String,
         cents: Long,
         transferId: Long? = null,
-        status: String = "SPENT",
+        status: String = mapOf("INCOME" to "RECEIVED", "EXPENSE" to "SPENT", "TRANSFER" to "COMPLETED").getValue(type),
     ) = t.execSql(
         """
         INSERT INTO transactions (account_id, type, amount_cents, status, occurred_on, transfer_id,
@@ -46,7 +46,10 @@ class LedgerIntegrityTest {
     @Test
     fun retiredStatusesAreRejected() = runTest {
         val a = t.accounts.create("A", AccountType.CASH)
-        rawInsert(a, "INCOME", 100) // SPENT is accepted
+        rawInsert(a, "INCOME", 100) // RECEIVED is accepted
+        rawInsert(a, "EXPENSE", -100) // SPENT is accepted
+        assertThrows("income cannot be SPENT", SQLiteException::class.java) { rawInsert(a, "INCOME", 100, status = "SPENT") }
+        assertThrows("expense cannot be RECEIVED", SQLiteException::class.java) { rawInsert(a, "EXPENSE", -100, status = "RECEIVED") }
         listOf("PENDING", "CLEARED", "BOGUS").forEach { status ->
             assertThrows(status, SQLiteException::class.java) { rawInsert(a, "INCOME", 100, status = status) }
         }

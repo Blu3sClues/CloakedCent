@@ -73,7 +73,7 @@ data class AccountEditorState(
 
 /** Form state only: every rule is enforced by [AccountRepository]. */
 class AccountEditorViewModel(
-    private val accountId: Long?,
+    val accountId: Long?,
     private val accounts: AccountRepository,
 ) : ViewModel() {
 
@@ -92,7 +92,6 @@ class AccountEditorViewModel(
                             loading = false,
                             name = account.name,
                             type = account.type,
-                            openingBalance = AmountInput.format(account.openingBalance),
                             includeInTotals = account.includeInTotals,
                         )
                     }
@@ -161,6 +160,7 @@ class AccountEditorViewModel(
 fun AccountEditorRoute(
     onDone: () -> Unit,
     onArchived: () -> Unit,
+    onAdjustBalance: (Long) -> Unit,
     viewModel: AccountEditorViewModel = viewModel(factory = AccountEditorViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -176,6 +176,7 @@ fun AccountEditorRoute(
         onIncludeInTotalsChange = viewModel::onIncludeInTotalsChange,
         onSave = viewModel::save,
         onArchive = viewModel::archive,
+        onAdjustBalance = { viewModel.accountId?.let(onAdjustBalance) },
     )
 }
 
@@ -189,6 +190,7 @@ fun AccountEditorScreen(
     onIncludeInTotalsChange: (Boolean) -> Unit,
     onSave: () -> Unit,
     onArchive: () -> Unit,
+    onAdjustBalance: () -> Unit = {},
 ) {
     var confirmArchive by remember { mutableStateOf(false) }
     Scaffold(
@@ -222,20 +224,19 @@ fun AccountEditorScreen(
                 selected = state.type,
                 onSelect = onTypeChange,
             )
-            MoneyField(
-                value = state.openingBalance,
-                onValueChange = onOpeningBalanceChange,
-                label = stringResource(R.string.field_opening_balance),
-                supportingText = stringResource(
-                    when {
-                        state.openingBalanceInvalid -> R.string.error_amount_invalid
-                        state.isNew -> R.string.hint_opening_balance
-                        else -> R.string.hint_opening_balance_fixed
-                    },
-                ),
-                isError = state.openingBalanceInvalid,
-                enabled = state.isNew,
-            )
+            // The opening balance is set once. Later corrections go through "Adjust balance",
+            // which records an auditable transaction instead of rewriting history.
+            if (state.isNew) {
+                MoneyField(
+                    value = state.openingBalance,
+                    onValueChange = onOpeningBalanceChange,
+                    label = stringResource(R.string.field_opening_balance),
+                    supportingText = stringResource(
+                        if (state.openingBalanceInvalid) R.string.error_amount_invalid else R.string.hint_opening_balance,
+                    ),
+                    isError = state.openingBalanceInvalid,
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.field_include_in_totals), style = MaterialTheme.typography.bodyLarge)
@@ -254,6 +255,11 @@ fun AccountEditorScreen(
                 Text(stringResource(R.string.action_save))
             }
             if (!state.isNew) {
+                OutlinedButton(
+                    onClick = onAdjustBalance,
+                    enabled = !state.saving && !state.loading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.action_adjust_balance)) }
                 OutlinedButton(
                     onClick = { confirmArchive = true },
                     enabled = !state.saving,

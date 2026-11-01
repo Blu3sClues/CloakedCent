@@ -5,7 +5,6 @@ import com.pocketbudget.app.di.AppContainer
 import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.NewTransaction
 import com.pocketbudget.app.domain.model.NewTransfer
-import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
@@ -38,7 +37,7 @@ object SampleData {
             type: TransactionType,
             amount: String,
             date: LocalDate,
-            status: TransactionStatus,
+            scheduled: Boolean,
             category: String,
             payee: String? = null,
         ) = ledger.record(
@@ -48,17 +47,17 @@ object SampleData {
                 type = type,
                 amount = Money.parse(amount),
                 occurredOn = date,
-                status = status,
+                scheduled = scheduled,
                 categoryId = categories[category]?.id,
                 payeeId = payee?.let { payees.getOrCreate(it) },
             ),
         )
 
-        entry("salary", checking, TransactionType.INCOME, "3200.00", firstOfMonth, TransactionStatus.SPENT, "Salary", "Employer")
-        entry("rent", checking, TransactionType.EXPENSE, "1100.00", firstOfMonth, TransactionStatus.SPENT, "Housing", "Landlord")
-        entry("groceries", card, TransactionType.EXPENSE, "86.42", today, TransactionStatus.SPENT, "Groceries", "Fresh Market")
-        entry("dinner", card, TransactionType.EXPENSE, "42.15", today, TransactionStatus.SPENT, "Dining out", "Corner Bistro")
-        entry("power", checking, TransactionType.EXPENSE, "64.30", today.plusDays(10), TransactionStatus.SCHEDULED, "Utilities", "City Power")
+        entry("salary", checking, TransactionType.INCOME, "3200.00", firstOfMonth, false, "Salary", "Employer")
+        entry("rent", checking, TransactionType.EXPENSE, "1100.00", firstOfMonth, false, "Housing", "Landlord")
+        entry("groceries", card, TransactionType.EXPENSE, "86.42", today, false, "Groceries", "Fresh Market")
+        entry("dinner", card, TransactionType.EXPENSE, "42.15", today, false, "Dining out", "Corner Bistro")
+        entry("power", checking, TransactionType.EXPENSE, "64.30", today.plusDays(10), true, "Utilities", "City Power")
         ledger.recordTransfer(
             NewTransfer(
                 requestId = "sample-savings",
@@ -66,7 +65,7 @@ object SampleData {
                 toAccountId = savings,
                 amount = Money.parse("500.00"),
                 occurredOn = firstOfMonth.plusDays(1),
-                status = TransactionStatus.SPENT,
+                scheduled = false,
             ),
         )
     }

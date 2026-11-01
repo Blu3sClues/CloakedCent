@@ -50,6 +50,7 @@ class FakeLedger {
 
     val recorded = mutableListOf<NewTransaction>()
     val transfers = mutableListOf<NewTransfer>()
+    val adjustments = mutableListOf<com.pocketbudget.app.domain.model.NewAdjustment>()
     val edits = mutableListOf<Pair<Long, TransactionEdit>>()
     val searches = mutableListOf<TransactionFilter>()
     val createdAccounts = mutableListOf<Triple<String, AccountType, Money>>()
@@ -101,6 +102,9 @@ class FakeLedger {
             check()
         }
         override suspend fun confirm(id: Long) = true
+        override suspend fun adjustBalance(adjustment: com.pocketbudget.app.domain.model.NewAdjustment): Long {
+            check(); adjustments += adjustment; return adjustments.size.toLong()
+        }
         override fun observeRecent(limit: Int): Flow<List<TransactionListItem>> = flowOf(emptyList())
         override fun observePeriodSummary(start: LocalDate, endInclusive: LocalDate) = flowOf(PeriodSummary.ZERO)
         override fun search(filter: TransactionFilter): Flow<List<TransactionListItem>> {

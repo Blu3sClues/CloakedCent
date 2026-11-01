@@ -164,6 +164,90 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate3To4SplitsStatusesByTypeAndKeepsHistory() = runTest {
+        helper.createDatabase(TEST_DB, 3).apply {
+            // v3 trigger and immutability, as on a Stage 4.1 install.
+            execSQL(
+                """
+                CREATE TRIGGER trg_transactions_validate_update BEFORE UPDATE ON transactions
+                WHEN NEW.status NOT IN ('SCHEDULED', 'SPENT')
+                BEGIN SELECT RAISE(ABORT, 'v3 rule'); END
+                """,
+            )
+            execSQL(
+                """
+                CREATE TRIGGER trg_revisions_immutable_update BEFORE UPDATE ON transaction_revisions
+                BEGIN SELECT RAISE(ABORT, 'revisions are immutable'); END
+                """,
+            )
+            listOf(1, 2).forEach { id ->
+                execSQL(
+                    """
+                    INSERT INTO accounts (id, name, type, opening_balance_cents, include_in_totals, is_archived, created_at, updated_at)
+                    VALUES (?, 'A$id', 'CHECKING', 10000, 1, 0, 0, 0)
+                    """,
+                    arrayOf<Any>(id),
+                )
+            }
+            execSQL("INSERT INTO transfers (id, request_id, from_account_id, to_account_id, created_at) VALUES (1, 'x', 1, 2, 0)")
+            fun entry(id: Int, account: Int, type: String, cents: Long, status: String, transfer: Int? = null) = execSQL(
+                """
+                INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on,
+                    transfer_id, revision, is_deleted, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 20400, ?, 2, 0, 0, 0)
+                """,
+                arrayOf<Any?>(id, if (transfer == null) "r$id" else null, account, type, cents, status, transfer),
+            )
+            entry(1, 1, "INCOME", 5_000, "SPENT")
+            entry(2, 1, "EXPENSE", -1_000, "SPENT")
+            entry(3, 1, "TRANSFER", -2_000, "SPENT", transfer = 1)
+            entry(4, 2, "TRANSFER", 2_000, "SPENT", transfer = 1)
+            entry(5, 1, "EXPENSE", -300, "SCHEDULED")
+            execSQL(
+                """
+                INSERT INTO transaction_revisions (transaction_id, revision, action, account_id, type, amount_cents,
+                    status, occurred_on, recorded_at)
+                VALUES (1, 1, 'UPDATE', 1, 'INCOME', 4500, 'SPENT', 20400, 0)
+                """,
+            )
+            close()
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migrations.MIGRATION_3_4)
+        migrated.query("SELECT status, is_adjustment FROM transactions ORDER BY id").use {
+            val rows = generateSequence { if (it.moveToNext()) it.getString(0) to it.getInt(1) else null }.toList()
+            assertEquals(listOf("RECEIVED", "SPENT", "COMPLETED", "COMPLETED", "SCHEDULED"), rows.map { r -> r.first })
+            assertEquals(listOf(0, 0, 0, 0, 0), rows.map { r -> r.second })
+        }
+        migrated.query("SELECT status, amount_cents FROM transaction_revisions").use {
+            it.moveToFirst()
+            assertEquals("RECEIVED", it.getString(0))
+            assertEquals(4_500L, it.getLong(1))
+        }
+        migrated.close()
+
+        val db = PocketBudgetDatabaseFactory.create(context, passphrase, name = TEST_DB)
+        helper.closeWhenFinished(db)
+        val balances = RoomAccountRepository({ db }).observeBalances().first().associateBy { it.account.id }
+        assertEquals(Money(12_000), balances.getValue(1).current) // 10,000 + 5,000 - 1,000 - 2,000
+        assertEquals(Money(11_700), balances.getValue(1).projected)
+        assertEquals(Money(12_000), balances.getValue(2).current)
+        // Confirming a migrated scheduled expense uses the v4 rules.
+        assertEquals(true, com.pocketbudget.app.data.repository.RoomTransactionRepository({ db }).confirm(5))
+        db.openHelper.readableDatabase.query("SELECT status FROM transactions WHERE id = 5").use {
+            it.moveToFirst()
+            assertEquals("SPENT", it.getString(0))
+        }
+        val writable = db.openHelper.writableDatabase
+        assertThrows(SQLiteException::class.java) {
+            writable.execSQL("UPDATE transactions SET status = 'SPENT' WHERE id = 1") // income cannot be SPENT
+        }
+        assertThrows(SQLiteException::class.java) {
+            writable.execSQL("UPDATE transaction_revisions SET amount_cents = 0")
+        }
+    }
+
+    @Test
     fun migrateFromFirstVersionToLatest() = runTest {
         helper.createDatabase(TEST_DB, FIRST_VERSION).apply {
             execSQL(

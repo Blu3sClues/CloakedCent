@@ -30,6 +30,8 @@ import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.TransactionListItem
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
+import com.pocketbudget.app.ui.feature.transaction.statusLabel
+import com.pocketbudget.app.ui.feature.transaction.typeLabel
 import com.pocketbudget.app.ui.theme.MoneyTextStyles
 import com.pocketbudget.app.ui.theme.PocketBudgetTheme
 import java.time.format.DateTimeFormatter
@@ -123,21 +125,14 @@ fun EmptyState(
 /** Makes clear whether money has actually moved: scheduled entries are projections. */
 @Composable
 fun StatusChip(status: TransactionStatus, modifier: Modifier = Modifier) {
-    val (label, container, content) = when (status) {
-        TransactionStatus.SCHEDULED -> Triple(
-            R.string.status_scheduled,
-            MaterialTheme.colorScheme.tertiaryContainer,
-            MaterialTheme.colorScheme.onTertiaryContainer,
-        )
-        TransactionStatus.SPENT -> Triple(
-            R.string.status_spent,
-            MaterialTheme.colorScheme.primaryContainer,
-            MaterialTheme.colorScheme.onPrimaryContainer,
-        )
+    val (container, content) = if (status.isScheduled) {
+        MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+    } else {
+        MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
     }
     Surface(modifier = modifier, color = container, contentColor = content, shape = MaterialTheme.shapes.small) {
         Text(
-            text = stringResource(label),
+            text = stringResource(statusLabel(status)),
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelSmall,
         )
@@ -182,7 +177,7 @@ fun TransactionRow(item: TransactionListItem, modifier: Modifier = Modifier) {
             item.counterpartAccountName.orEmpty(),
         )
         else -> item.payeeName ?: item.categoryName ?: stringResource(
-            if (item.type == TransactionType.INCOME) R.string.type_income else R.string.type_expense,
+            if (item.isAdjustment) R.string.type_adjustment else typeLabel(item.type),
         )
     }
     val subtitle = listOfNotNull(

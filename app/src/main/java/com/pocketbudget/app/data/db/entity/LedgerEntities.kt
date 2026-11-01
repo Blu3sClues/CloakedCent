@@ -157,6 +157,8 @@ data class TransactionEntity(
     val note: String? = null,
     val revision: Int = 1,
     @ColumnInfo(name = "is_deleted") val isDeleted: Boolean = false,
+    /** Created via "Adjust balance" (type ADJUSTMENT, or INCOME/EXPENSE when reported as such). */
+    @ColumnInfo(name = "is_adjustment", defaultValue = "0") val isAdjustment: Boolean = false,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )

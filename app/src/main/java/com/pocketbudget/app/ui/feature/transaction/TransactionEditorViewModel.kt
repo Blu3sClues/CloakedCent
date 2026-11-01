@@ -50,7 +50,8 @@ data class TransactionEditorState(
     val categoryId: Long? = null,
     val payee: String = "",
     val note: String = "",
-    val status: TransactionStatus = TransactionStatus.SPENT,
+    /** False = completed (Spent/Received/Completed by type); true = Scheduled. */
+    val scheduled: Boolean = false,
     val amountInvalid: Boolean = false,
     val accountMissing: Boolean = false,
     val toAccountMissing: Boolean = false,
@@ -59,6 +60,9 @@ data class TransactionEditorState(
     val finished: Boolean = false,
 ) {
     val isTransfer: Boolean get() = type == TransactionType.TRANSFER
+
+    /** Only income and expenses carry a category and payee. */
+    val hasCategory: Boolean get() = type == TransactionType.INCOME || type == TransactionType.EXPENSE
 }
 
 /**
@@ -128,7 +132,7 @@ class TransactionEditorViewModel(
                 categoryId = detail.categoryId,
                 payee = detail.payeeName.orEmpty(),
                 note = detail.note.orEmpty(),
-                status = detail.status,
+                scheduled = detail.status.isScheduled,
             )
         }
     }
@@ -137,7 +141,7 @@ class TransactionEditorViewModel(
         val kind = when (type) {
             TransactionType.INCOME -> CategoryKind.INCOME
             TransactionType.EXPENSE -> CategoryKind.EXPENSE
-            TransactionType.TRANSFER -> return emptyList()
+            TransactionType.TRANSFER, TransactionType.ADJUSTMENT -> return emptyList()
         }
         val labels = allCategories.pathLabels()
         return allCategories.filter { it.kind == kind }.map { it.id to labels.getValue(it.id) }.sortedBy { it.second }
@@ -155,7 +159,7 @@ class TransactionEditorViewModel(
     fun onCategoryChange(id: Long?) = _state.update { it.copy(categoryId = id, error = null) }
     fun onPayeeChange(text: String) = _state.update { it.copy(payee = text) }
     fun onNoteChange(text: String) = _state.update { it.copy(note = text) }
-    fun onStatusChange(status: TransactionStatus) = _state.update { it.copy(status = status) }
+    fun onScheduledChange(scheduled: Boolean) = _state.update { it.copy(scheduled = scheduled) }
 
     fun save() {
         val s = _state.value
@@ -174,17 +178,17 @@ class TransactionEditorViewModel(
         viewModelScope.launch {
             try {
                 val note = s.note.trim().ifEmpty { null }
-                val payeeId = if (s.isTransfer) null else s.payee.trim().takeIf { it.isNotEmpty() }?.let { payees.getOrCreate(it) }
+                val payeeId = if (!s.hasCategory) null else s.payee.trim().takeIf { it.isNotEmpty() }?.let { payees.getOrCreate(it) }
                 when {
                     transactionId != null -> transactions.edit(
                         transactionId,
-                        TransactionEdit(amount!!, s.date, s.categoryId.takeUnless { s.isTransfer }, payeeId, note),
+                        TransactionEdit(amount!!, s.date, s.categoryId.takeIf { s.hasCategory }, payeeId, note),
                     )
                     s.isTransfer -> transactions.recordTransfer(
-                        NewTransfer(requestId, s.accountId!!, s.toAccountId!!, amount!!, s.date, s.status, note),
+                        NewTransfer(requestId, s.accountId!!, s.toAccountId!!, amount!!, s.date, s.scheduled, note),
                     )
                     else -> transactions.record(
-                        NewTransaction(requestId, s.accountId!!, s.type, amount!!, s.date, s.status, s.categoryId, payeeId, note),
+                        NewTransaction(requestId, s.accountId!!, s.type, amount!!, s.date, s.scheduled, s.categoryId, payeeId, note),
                     )
                 }
                 _state.update { it.copy(saving = false, finished = true) }

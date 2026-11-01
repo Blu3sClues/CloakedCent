@@ -39,7 +39,7 @@ class FormScreensTest {
         occurredOn = LocalDate.of(2026, 11, 11), accountId = 1, accountName = "Checking",
         categoryId = 5, categoryName = "Utilities", payeeId = 2, payeeName = "City Power",
         counterpartAccountId = null, counterpartAccountName = null, note = null, revision = 2,
-        isDeleted = false, createdAt = Instant.EPOCH, updatedAt = Instant.EPOCH,
+        isDeleted = false, isAdjustment = false, createdAt = Instant.EPOCH, updatedAt = Instant.EPOCH,
         history = listOf(
             TransactionRevision(1, RevisionAction.UPDATE, Money(-6_000), TransactionStatus.SCHEDULED,
                 LocalDate.of(2026, 11, 10), "Utilities", "City Power", null, Instant.EPOCH),

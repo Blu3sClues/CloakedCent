@@ -11,6 +11,8 @@ import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.PeriodSummary
 import com.pocketbudget.app.domain.model.TransactionEdit
 import com.pocketbudget.app.domain.model.TransactionStatus
+import com.pocketbudget.app.domain.model.TransactionStatus.COMPLETED
+import com.pocketbudget.app.domain.model.TransactionStatus.RECEIVED
 import com.pocketbudget.app.domain.model.TransactionStatus.SCHEDULED
 import com.pocketbudget.app.domain.model.TransactionStatus.SPENT
 import com.pocketbudget.app.domain.model.TransactionType
@@ -50,12 +52,12 @@ class TransactionRepositoryTest {
         accountId: Long,
         type: TransactionType,
         cents: Long,
-        status: TransactionStatus = SPENT,
+        scheduled: Boolean = false,
         categoryId: Long? = null,
-    ) = NewTransaction("req-$id", accountId, type, Money(cents), today, status, categoryId)
+    ) = NewTransaction("req-$id", accountId, type, Money(cents), today, scheduled, categoryId)
 
-    private fun transfer(id: String, from: Long, to: Long, cents: Long, status: TransactionStatus = SPENT) =
-        NewTransfer("xfer-$id", from, to, Money(cents), today, status)
+    private fun transfer(id: String, from: Long, to: Long, cents: Long, scheduled: Boolean = false) =
+        NewTransfer("xfer-$id", from, to, Money(cents), today, scheduled)
 
     private suspend inline fun <reified E : Throwable> assertFails(crossinline block: suspend () -> Unit) {
         try {
@@ -79,10 +81,15 @@ class TransactionRepositoryTest {
     }
 
     @Test
-    fun newEntriesDefaultToSpent() = runTest {
+    fun newEntriesDefaultToTheirTypesCompletedStatus() = runTest {
         val a = account("A")
         val id = t.ledger.record(NewTransaction("default", a, INCOME, Money(100), today))
-        assertEquals(SPENT, t.db.transactionDao().getById(id)!!.status)
+        assertEquals(RECEIVED, t.db.transactionDao().getById(id)!!.status)
+        val expense = t.ledger.record(entry("spend", a, EXPENSE, 50))
+        assertEquals(SPENT, t.db.transactionDao().getById(expense)!!.status)
+        val b = account("B")
+        val transferId = t.ledger.recordTransfer(transfer("move", a, b, 25))
+        assertEquals(listOf(COMPLETED, COMPLETED), t.db.transactionDao().getTransferLegs(transferId).map { it.status })
     }
 
     @Test
@@ -106,7 +113,7 @@ class TransactionRepositoryTest {
     @Test
     fun scheduledEntriesAreProjectedUntilMarkedSpentExactlyOnce() = runTest {
         val a = account("A", 10_000)
-        val id = t.ledger.record(entry("bill", a, EXPENSE, 2_500, SCHEDULED))
+        val id = t.ledger.record(entry("bill", a, EXPENSE, 2_500, scheduled = true))
 
         balances().getValue(a).let {
             assertEquals("scheduled must not affect the actual balance", Money(10_000), it.current)
@@ -130,7 +137,7 @@ class TransactionRepositoryTest {
     fun scheduledTransferMovesMoneyWhenMarkedSpent() = runTest {
         val a = account("A", 10_000)
         val b = account("B")
-        val transferId = t.ledger.recordTransfer(transfer("plan", a, b, 4_000, SCHEDULED))
+        val transferId = t.ledger.recordTransfer(transfer("plan", a, b, 4_000, scheduled = true))
         val leg = t.db.transactionDao().getTransferLegs(transferId).first()
 
         assertEquals(Money(10_000), balances().getValue(a).current)

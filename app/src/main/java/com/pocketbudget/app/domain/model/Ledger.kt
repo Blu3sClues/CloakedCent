@@ -47,14 +47,62 @@ data class Category(val id: Long, val name: String, val kind: CategoryKind, val 
 
 enum class PayeeType { PERSON, MERCHANT }
 
-enum class TransactionType { INCOME, EXPENSE, TRANSFER }
+enum class TransactionType {
+    INCOME,
+    EXPENSE,
+    TRANSFER,
+
+    /** Balance correction excluded from income/expense reports. Never scheduled. */
+    ADJUSTMENT;
+
+    /** The status an entry of this type has once the money has actually moved. */
+    val completedStatus: TransactionStatus
+        get() = when (this) {
+            INCOME -> TransactionStatus.RECEIVED
+            EXPENSE -> TransactionStatus.SPENT
+            TRANSFER, ADJUSTMENT -> TransactionStatus.COMPLETED
+        }
+}
 
 /**
- * Lifecycle of a ledger entry. SPENT means the money has actually moved (for
- * income too); SCHEDULED entries are projections and never count as current.
- * Schema v3 merged the former PENDING and CLEARED statuses into SPENT.
+ * Lifecycle of a ledger entry. SCHEDULED entries are projections and never count
+ * in actual balances. Every other status means the money has moved and is specific
+ * to the type (see [TransactionType.completedStatus]); the database rejects
+ * mismatches. Schema v4 split the former universal SPENT by type.
  */
-enum class TransactionStatus { SCHEDULED, SPENT }
+enum class TransactionStatus {
+    SCHEDULED,
+    SPENT,
+    RECEIVED,
+    COMPLETED;
+
+    val isScheduled: Boolean get() = this == SCHEDULED
+}
+
+/** How a manual balance adjustment is reported. */
+enum class AdjustmentKind {
+    /** Changes the balance only; excluded from income and spending. */
+    BALANCE_ONLY,
+
+    /** Recorded as income (increases only). */
+    INCOME,
+
+    /** Recorded as an expense (decreases only). */
+    EXPENSE,
+}
+
+/**
+ * Corrects an account's balance by [amount] (signed: positive increases, negative
+ * decreases). Always recorded as an auditable ledger entry, never by rewriting balances.
+ */
+data class NewAdjustment(
+    val requestId: String,
+    val accountId: Long,
+    val amount: Money,
+    val kind: AdjustmentKind,
+    val occurredOn: LocalDate,
+    val note: String? = null,
+)
 
 /** App-wide appearance choice. */
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
@@ -69,7 +117,8 @@ data class NewTransaction(
     val type: TransactionType,
     val amount: Money,
     val occurredOn: LocalDate,
-    val status: TransactionStatus = TransactionStatus.SPENT,
+    /** False records it as completed (Received/Spent); true as a projection. */
+    val scheduled: Boolean = false,
     val categoryId: Long? = null,
     val payeeId: Long? = null,
     val note: String? = null,
@@ -82,7 +131,8 @@ data class NewTransfer(
     val toAccountId: Long,
     val amount: Money,
     val occurredOn: LocalDate,
-    val status: TransactionStatus = TransactionStatus.SPENT,
+    /** False records it as Completed; true as a projection. */
+    val scheduled: Boolean = false,
     val note: String? = null,
 )
 
@@ -106,6 +156,7 @@ data class TransactionListItem(
     val categoryName: String?,
     val payeeName: String?,
     val counterpartAccountName: String?,
+    val isAdjustment: Boolean = false,
 )
 
 /** Confirmed income and expense for a period. Transfers are excluded by definition. */
@@ -149,6 +200,8 @@ data class TransactionFilter(
     /** Matches this category and its subcategories. */
     val categoryId: Long? = null,
     val payeeId: Long? = null,
+    /** true = scheduled only, false = completed only, null = both. */
+    val scheduled: Boolean? = null,
 ) {
     val isEmpty: Boolean get() = this == TransactionFilter()
 }
@@ -186,6 +239,7 @@ data class TransactionDetail(
     val note: String?,
     val revision: Int,
     val isDeleted: Boolean,
+    val isAdjustment: Boolean,
     val createdAt: Instant,
     val updatedAt: Instant,
     /** Oldest first. */
@@ -200,6 +254,8 @@ sealed class LedgerException(message: String) : Exception(message) {
     class CategoryMismatch : LedgerException("Category does not exist or does not match the entry type")
     class SameAccountTransfer : LedgerException("Transfer source and destination must differ")
     class AccountHasBalance : LedgerException("Only accounts with a zero balance can be archived")
+    class AdjustmentKindMismatch :
+        LedgerException("Increases can be income or balance-only; decreases can be expense or balance-only")
     class NotFound(what: String) : LedgerException("$what not found")
     class InvalidOperation(message: String) : LedgerException(message)
 }

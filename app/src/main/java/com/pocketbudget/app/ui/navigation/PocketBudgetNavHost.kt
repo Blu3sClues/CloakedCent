@@ -9,6 +9,7 @@ import androidx.navigation.navArgument
 import com.pocketbudget.app.domain.model.TransactionType
 import com.pocketbudget.app.ui.feature.account.AccountEditorRoute
 import com.pocketbudget.app.ui.feature.account.AccountEditorViewModel
+import com.pocketbudget.app.ui.feature.account.AdjustBalanceRoute
 import com.pocketbudget.app.ui.feature.dashboard.DashboardRoute
 import com.pocketbudget.app.ui.feature.history.HistoryRoute
 import com.pocketbudget.app.ui.feature.history.HistoryViewModel
@@ -26,6 +27,9 @@ private object Routes {
     const val TRANSACTION = "transaction/{${TransactionEditorViewModel.ARG_TRANSACTION_ID}}"
     const val EDIT_TRANSACTION = "transaction/{${TransactionEditorViewModel.ARG_TRANSACTION_ID}}/edit"
 
+    const val ADJUST_BALANCE = "account/{${AccountEditorViewModel.ARG_ACCOUNT_ID}}/adjust"
+
+    fun adjustBalance(accountId: Long) = "account/$accountId/adjust"
     fun account(id: Long?) = "account?${AccountEditorViewModel.ARG_ACCOUNT_ID}=${id ?: -1}"
     fun history(accountId: Long?) = "history?${HistoryViewModel.ARG_ACCOUNT_ID}=${accountId ?: -1}"
     fun newTransaction(type: TransactionType) = "transaction/new?${TransactionEditorViewModel.ARG_TYPE}=${type.name}"
@@ -56,7 +60,11 @@ fun PocketBudgetNavHost() {
                 onDone = back,
                 // The archived account's history screen is no longer meaningful.
                 onArchived = { nav.popBackStack(Routes.DASHBOARD, inclusive = false) },
+                onAdjustBalance = { nav.navigate(Routes.adjustBalance(it)) },
             )
+        }
+        composable(Routes.ADJUST_BALANCE, listOf(navArgument(AccountEditorViewModel.ARG_ACCOUNT_ID) { type = NavType.LongType })) {
+            AdjustBalanceRoute(onDone = back)
         }
         composable(Routes.HISTORY, listOf(optionalId(HistoryViewModel.ARG_ACCOUNT_ID))) {
             HistoryRoute(

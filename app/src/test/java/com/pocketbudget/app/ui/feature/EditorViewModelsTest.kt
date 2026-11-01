@@ -87,7 +87,7 @@ class EditorViewModelsTest {
         vm.onAmountChange("1,234.50")
         vm.onCategoryChange(21)
         vm.onPayeeChange("Corner Bistro")
-        vm.onStatusChange(TransactionStatus.SCHEDULED)
+        vm.onScheduledChange(true)
         vm.save()
         advanceUntilIdle()
 
@@ -95,7 +95,7 @@ class EditorViewModelsTest {
         assertEquals(Money(123_450), saved.amount)
         assertEquals(TransactionType.EXPENSE, saved.type)
         assertEquals(21L, saved.categoryId)
-        assertEquals(TransactionStatus.SCHEDULED, saved.status)
+        assertTrue(saved.scheduled)
         assertEquals(LocalDate.of(2026, 11, 15), saved.occurredOn)
         assertEquals("Corner Bistro", ledger.payees.value.first { it.id == saved.payeeId }.name)
         assertTrue(vm.state.value.finished)
@@ -152,7 +152,7 @@ class EditorViewModelsTest {
             occurredOn = LocalDate.of(2026, 11, 2), accountId = 1, accountName = "Checking",
             categoryId = 20, categoryName = "Food", payeeId = 100, payeeName = "Fresh Market",
             counterpartAccountId = null, counterpartAccountName = null, note = "lunch", revision = 1,
-            isDeleted = false, createdAt = Instant.EPOCH, updatedAt = Instant.EPOCH, history = emptyList(),
+            isDeleted = false, isAdjustment = false, createdAt = Instant.EPOCH, updatedAt = Instant.EPOCH, history = emptyList(),
         )
         val vm = editor(id = 7)
         advanceUntilIdle()

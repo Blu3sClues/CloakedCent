@@ -61,6 +61,7 @@
     <string name="error_same_account">Choose two different accounts.</string>
     <string name="error_account_has_balance">Only accounts with a zero balance can be archived. Move or record the remaining balance first.</string>
     <string name="error_not_found">This record could not be found.</string>
+    <string name="error_adjustment_kind">Increases can be income or balance-only; decreases can be expense or balance-only.</string>
     <string name="error_not_allowed">This change isn\'t allowed.</string>
     <string name="error_unexpected">Something went wrong. Nothing was saved.</string>
 
@@ -70,7 +71,6 @@
     <string name="field_account_type">Account type</string>
     <string name="field_opening_balance">Opening balance</string>
     <string name="hint_opening_balance">Use a negative amount for money owed, e.g. -250.00</string>
-    <string name="hint_opening_balance_fixed">Set when the account was created</string>
     <string name="field_include_in_totals">Include in totals</string>
     <string name="hint_include_in_totals">Count this account in your total balance</string>
     <string name="confirm_archive_title">Archive this account?</string>
@@ -89,7 +89,7 @@
     <string name="field_payee">Payee or merchant</string>
     <string name="field_note">Note</string>
     <string name="field_status">Status</string>
-    <string name="hint_status">Spent = already happened and counts in your balance. Scheduled = planned; shown only in projected balances.</string>
+    <string name="hint_status">%1$s = already happened and counts in your balance. Scheduled = planned; shown only in projected balances.</string>
     <string name="label_deleted">Deleted</string>
 
     <string name="confirm_delete_title">Delete this transaction?</string>
@@ -127,4 +127,30 @@
     <string name="theme_system">System default</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <string name="status_received">Received</string>
+    <string name="status_completed">Completed</string>
+    <string name="action_mark_received">Mark as received</string>
+    <string name="action_mark_completed">Mark as completed</string>
+    <string name="action_adjust_balance">Adjust balance</string>
+    <string name="type_adjustment">Balance adjustment</string>
+    <string name="filter_status">Status</string>
+    <string name="filter_status_completed">Completed (spent, received, transferred)</string>
+    <string name="label_adjustment">Adjustment</string>
+    <string name="field_reporting">Reporting</string>
+
+    <string name="adjust_title">Adjust balance</string>
+    <string name="adjust_current">Current balance</string>
+    <string name="adjust_new">New balance</string>
+    <string name="adjust_increase">Increase</string>
+    <string name="adjust_decrease">Decrease</string>
+    <string name="adjust_amount">Adjustment amount</string>
+    <string name="adjust_report_as">Report this adjustment as</string>
+    <string name="adjust_save">Record adjustment</string>
+    <string name="adjust_audit_note">The adjustment is saved as its own transaction. Existing records are never overwritten.</string>
+    <string name="adjustment_kind_balance_only">Balance adjustment only</string>
+    <string name="adjustment_kind_income">Income</string>
+    <string name="adjustment_kind_expense">Expense</string>
+    <string name="adjustment_hint_balance_only">Corrects the balance. Not counted as income or spending.</string>
+    <string name="adjustment_hint_income">Counted in income reports.</string>
+    <string name="adjustment_hint_expense">Counted in spending reports.</string>
 </resources>

@@ -17,6 +17,8 @@ import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.Category
 import com.pocketbudget.app.domain.model.CategoryKind
 import com.pocketbudget.app.domain.model.LedgerException
+import com.pocketbudget.app.domain.model.AdjustmentKind
+import com.pocketbudget.app.domain.model.NewAdjustment
 import com.pocketbudget.app.domain.model.NewTransaction
 import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.PayeeType
@@ -202,8 +204,8 @@ class RoomTransactionRepository(
         // Idempotency: a repeated request returns the original entry untouched.
         dao.getByRequestId(transaction.requestId)?.let { return@write it.id }
 
-        if (transaction.type == TransactionType.TRANSFER) {
-            throw LedgerException.InvalidOperation("Use recordTransfer for transfers")
+        if (transaction.type != TransactionType.INCOME && transaction.type != TransactionType.EXPENSE) {
+            throw LedgerException.InvalidOperation("Use recordTransfer or adjustBalance for this type")
         }
         requirePositive(transaction.amount)
         requireActiveAccount(db, transaction.accountId)
@@ -216,7 +218,7 @@ class RoomTransactionRepository(
                 accountId = transaction.accountId,
                 type = transaction.type,
                 amountCents = signed(transaction.type, transaction.amount).cents,
-                status = transaction.status,
+                status = statusFor(transaction.type, transaction.scheduled),
                 occurredOn = transaction.occurredOn,
                 categoryId = transaction.categoryId,
                 payeeId = transaction.payeeId,
@@ -250,7 +252,7 @@ class RoomTransactionRepository(
             accountId = accountId,
             type = TransactionType.TRANSFER,
             amountCents = amount.cents,
-            status = transfer.status,
+            status = statusFor(TransactionType.TRANSFER, transfer.scheduled),
             occurredOn = transfer.occurredOn,
             transferId = transferId,
             note = transfer.note,
@@ -278,6 +280,18 @@ class RoomTransactionRepository(
                     RevisionAction.UPDATE,
                 )
             }
+        } else if (current.type == TransactionType.ADJUSTMENT) {
+            if (edit.categoryId != null || edit.payeeId != null) {
+                throw LedgerException.InvalidOperation("Balance adjustments have no category or payee")
+            }
+            // The direction of a balance-only adjustment is fixed when it is recorded.
+            val amount = if (current.amountCents < 0) -edit.amount else edit.amount
+            applyChange(
+                db,
+                current,
+                current.copy(amountCents = amount.cents, occurredOn = edit.occurredOn, note = edit.note),
+                RevisionAction.UPDATE,
+            )
         } else {
             requireCategory(db, edit.categoryId, current.type)
             applyChange(
@@ -302,8 +316,49 @@ class RoomTransactionRepository(
         }
     }
 
-    override suspend fun confirm(id: Long): Boolean =
-        transition(id, from = TransactionStatus.SCHEDULED, to = TransactionStatus.SPENT)
+    override suspend fun confirm(id: Long): Boolean = write { db ->
+        val current = db.transactionDao().getById(id) ?: throw LedgerException.NotFound("Transaction $id")
+        val entries = legsOf(db, current)
+        if (entries.any { it.isDeleted || !it.status.isScheduled }) return@write false
+        entries.forEach {
+            applyChange(db, it, it.copy(status = it.type.completedStatus), RevisionAction.STATUS_CHANGE)
+        }
+        true
+    }
+
+    override suspend fun adjustBalance(adjustment: NewAdjustment): Long = write { db ->
+        val dao = db.transactionDao()
+        dao.getByRequestId(adjustment.requestId)?.let { return@write it.id }
+
+        if (adjustment.amount.isZero) throw LedgerException.InvalidAmount()
+        val type = when (adjustment.kind) {
+            AdjustmentKind.BALANCE_ONLY -> TransactionType.ADJUSTMENT
+            AdjustmentKind.INCOME -> TransactionType.INCOME
+            AdjustmentKind.EXPENSE -> TransactionType.EXPENSE
+        }
+        if ((type == TransactionType.INCOME && adjustment.amount.isNegative) ||
+            (type == TransactionType.EXPENSE && adjustment.amount.isPositive)
+        ) {
+            throw LedgerException.AdjustmentKindMismatch()
+        }
+        requireActiveAccount(db, adjustment.accountId)
+
+        val now = clock.millis()
+        dao.insert(
+            TransactionEntity(
+                requestId = adjustment.requestId,
+                accountId = adjustment.accountId,
+                type = type,
+                amountCents = adjustment.amount.cents,
+                status = type.completedStatus,
+                occurredOn = adjustment.occurredOn,
+                note = adjustment.note,
+                isAdjustment = true,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+    }
 
     override fun observeRecent(limit: Int): Flow<List<TransactionListItem>> =
         observe { it.transactionDao().observeRecent(limit) }.map { rows -> rows.map { it.toItem() } }
@@ -324,6 +379,7 @@ class RoomTransactionRepository(
                 filterCategory = categoryIds != null,
                 categoryIds = categoryIds.orEmpty(),
                 payeeId = filter.payeeId,
+                scheduled = filter.scheduled,
             )
         }.map { rows -> rows.map { it.toItem() } }
 
@@ -348,6 +404,7 @@ class RoomTransactionRepository(
                         note = it.note,
                         revision = it.revision,
                         isDeleted = it.isDeleted,
+                        isAdjustment = it.isAdjustment,
                         createdAt = Instant.ofEpochMilli(it.createdAt),
                         updatedAt = Instant.ofEpochMilli(it.updatedAt),
                         history = revisions.map { r ->
@@ -378,6 +435,7 @@ class RoomTransactionRepository(
         categoryName = categoryName,
         payeeName = payeeName,
         counterpartAccountName = counterpartAccountName,
+        isAdjustment = isAdjustment,
     )
 
     private fun escapeLike(text: String) =
@@ -388,15 +446,8 @@ class RoomTransactionRepository(
             PeriodSummary(income = Money(it.incomeCents), expense = Money(it.expenseCents))
         }
 
-    /** Applies a status change to an entry (both legs for transfers) exactly once. */
-    private suspend fun transition(id: Long, from: TransactionStatus, to: TransactionStatus): Boolean =
-        write { db ->
-            val current = db.transactionDao().getById(id) ?: throw LedgerException.NotFound("Transaction $id")
-            val entries = legsOf(db, current)
-            if (entries.any { it.isDeleted || it.status != from }) return@write false
-            entries.forEach { applyChange(db, it, it.copy(status = to), RevisionAction.STATUS_CHANGE) }
-            true
-        }
+    private fun statusFor(type: TransactionType, scheduled: Boolean): TransactionStatus =
+        if (scheduled) TransactionStatus.SCHEDULED else type.completedStatus
 
     /** Snapshots [old] into history, then stores [new] as the next revision. */
     private suspend fun applyChange(

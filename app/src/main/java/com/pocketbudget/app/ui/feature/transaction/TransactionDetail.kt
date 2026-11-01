@@ -81,7 +81,7 @@ class TransactionDetailViewModel(
     private val _error = MutableStateFlow<Int?>(null)
     val error: StateFlow<Int?> = _error.asStateFlow()
 
-    fun markSpent() = act { transactions.confirm(id) }
+    fun markCompleted() = act { transactions.confirm(id) }
     fun delete() = act { transactions.delete(id) }
 
     private fun act(action: suspend () -> Unit) {
@@ -117,7 +117,7 @@ fun TransactionDetailRoute(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
-    TransactionDetailScreen(state, error, onBack, onEdit, viewModel::markSpent, viewModel::delete)
+    TransactionDetailScreen(state, error, onBack, onEdit, viewModel::markCompleted, viewModel::delete)
 }
 
 @Composable
@@ -126,7 +126,7 @@ fun TransactionDetailScreen(
     @StringRes error: Int?,
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
-    onMarkSpent: () -> Unit,
+    onMarkCompleted: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
@@ -153,9 +153,9 @@ fun TransactionDetailScreen(
                     SummaryCard(state.detail)
                     error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
                     if (!state.detail.isDeleted) {
-                        if (state.detail.status == TransactionStatus.SCHEDULED) {
-                            Button(onMarkSpent, Modifier.fillMaxWidth()) {
-                                Text(stringResource(R.string.action_mark_spent))
+                        if (state.detail.status.isScheduled) {
+                            Button(onMarkCompleted, Modifier.fillMaxWidth()) {
+                                Text(stringResource(markCompletedLabel(state.detail.type)))
                             }
                         }
                         OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
@@ -191,6 +191,9 @@ private fun SummaryCard(detail: TransactionDetail) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(typeLabel(detail.type)), style = MaterialTheme.typography.labelLarge)
                 StatusChip(detail.status)
+                if (detail.isAdjustment && detail.type != TransactionType.ADJUSTMENT) {
+                    Text(stringResource(R.string.label_adjustment), style = MaterialTheme.typography.labelLarge)
+                }
                 if (detail.isDeleted) {
                     Text(stringResource(R.string.label_deleted), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
                 }
@@ -211,6 +214,9 @@ private fun SummaryCard(detail: TransactionDetail) {
                 Field(R.string.field_to_account, to)
             } else {
                 Field(R.string.field_account, detail.accountName)
+                if (detail.type == TransactionType.ADJUSTMENT) {
+                    Field(R.string.field_reporting, stringResource(R.string.adjustment_kind_balance_only))
+                }
                 Field(R.string.field_category, detail.categoryName)
                 Field(R.string.field_payee, detail.payeeName)
             }

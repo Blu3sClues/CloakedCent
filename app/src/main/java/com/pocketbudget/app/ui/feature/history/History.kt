@@ -127,6 +127,7 @@ class HistoryViewModel(
     fun setAccount(id: Long?) = criteria.update { it.copy(accountId = id) }
     fun setCategory(id: Long?) = criteria.update { it.copy(categoryId = id) }
     fun setPayee(id: Long?) = criteria.update { it.copy(payeeId = id) }
+    fun setScheduled(scheduled: Boolean?) = criteria.update { it.copy(scheduled = scheduled) }
     fun setDates(start: LocalDate?, endInclusive: LocalDate?) =
         criteria.update { it.copy(start = start, endInclusive = endInclusive) }
 
@@ -176,6 +177,7 @@ fun HistoryRoute(
         onAccount = viewModel::setAccount,
         onCategory = viewModel::setCategory,
         onPayee = viewModel::setPayee,
+        onScheduled = viewModel::setScheduled,
         onDates = viewModel::setDates,
         onClear = viewModel::clear,
     )
@@ -193,6 +195,7 @@ fun HistoryScreen(
     onAccount: (Long?) -> Unit,
     onCategory: (Long?) -> Unit,
     onPayee: (Long?) -> Unit,
+    onScheduled: (Boolean?) -> Unit,
     onDates: (LocalDate?, LocalDate?) -> Unit,
     onClear: () -> Unit,
 ) {
@@ -236,6 +239,15 @@ fun HistoryScreen(
                     OptionChip(stringResource(R.string.filter_account), state.accounts, state.filter.accountId, onAccount)
                     OptionChip(stringResource(R.string.filter_category), state.categories, state.filter.categoryId, onCategory)
                     OptionChip(stringResource(R.string.filter_merchant), state.payees, state.filter.payeeId, onPayee)
+                    OptionChip(
+                        stringResource(R.string.filter_status),
+                        listOf(
+                            true to stringResource(R.string.status_scheduled),
+                            false to stringResource(R.string.filter_status_completed),
+                        ),
+                        state.filter.scheduled,
+                        onScheduled,
+                    )
                     if (!state.filter.isEmpty || query.isNotEmpty()) {
                         TextButton(onClick = onClear) { Text(stringResource(R.string.action_clear_filters)) }
                     }
@@ -271,7 +283,7 @@ fun HistoryScreen(
 }
 
 @Composable
-private fun OptionChip(label: String, options: List<Pair<Long, String>>, selected: Long?, onSelect: (Long?) -> Unit) {
+private fun <T : Any> OptionChip(label: String, options: List<Pair<T, String>>, selected: T?, onSelect: (T?) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         FilterChip(

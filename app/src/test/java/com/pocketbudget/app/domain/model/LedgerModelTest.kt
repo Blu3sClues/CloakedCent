@@ -48,7 +48,11 @@ class LedgerModelTest {
     }
 
     @Test
-    fun `only scheduled and spent statuses exist`() {
-        assertEquals(listOf(TransactionStatus.SCHEDULED, TransactionStatus.SPENT), TransactionStatus.entries)
+    fun `each type completes with its own status`() {
+        assertEquals(TransactionStatus.RECEIVED, TransactionType.INCOME.completedStatus)
+        assertEquals(TransactionStatus.SPENT, TransactionType.EXPENSE.completedStatus)
+        assertEquals(TransactionStatus.COMPLETED, TransactionType.TRANSFER.completedStatus)
+        assertEquals(TransactionStatus.COMPLETED, TransactionType.ADJUSTMENT.completedStatus)
+        assertEquals(listOf(true, false, false, false), TransactionStatus.entries.map { it.isScheduled })
     }
 }

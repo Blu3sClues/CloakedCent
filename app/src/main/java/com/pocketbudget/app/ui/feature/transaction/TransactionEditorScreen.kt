@@ -61,7 +61,7 @@ fun TransactionEditorRoute(
             onCategoryChange = viewModel::onCategoryChange,
             onPayeeChange = viewModel::onPayeeChange,
             onNoteChange = viewModel::onNoteChange,
-            onStatusChange = viewModel::onStatusChange,
+            onScheduledChange = viewModel::onScheduledChange,
             onSave = viewModel::save,
         ),
     )
@@ -77,7 +77,7 @@ class TransactionEditorActions(
     val onCategoryChange: (Long?) -> Unit = {},
     val onPayeeChange: (String) -> Unit = {},
     val onNoteChange: (String) -> Unit = {},
-    val onStatusChange: (TransactionStatus) -> Unit = {},
+    val onScheduledChange: (Boolean) -> Unit = {},
     val onSave: () -> Unit = {},
 )
 
@@ -127,7 +127,7 @@ fun TransactionEditorScreen(state: TransactionEditorState, actions: TransactionE
                 supportingText = stringResource(R.string.error_amount_invalid).takeIf { state.amountInvalid },
             )
             DateField(stringResource(R.string.field_date), state.date, actions.onDateChange)
-            if (!state.isTransfer) {
+            if (state.hasCategory) {
                 PickerField(
                     label = stringResource(R.string.field_category),
                     options = listOf<Pair<Long?, String>>(null to stringResource(R.string.category_none)) + state.categories,
@@ -143,13 +143,19 @@ fun TransactionEditorScreen(state: TransactionEditorState, actions: TransactionE
                 modifier = Modifier.fillMaxWidth(),
             )
             if (state.isNew) {
+                // Completed wording follows the type: Spent / Received / Completed.
                 PickerField(
                     label = stringResource(R.string.field_status),
-                    options = listOf(TransactionStatus.SPENT, TransactionStatus.SCHEDULED)
-                        .map { it to stringResource(statusLabel(it)) },
-                    selected = state.status,
-                    onSelect = actions.onStatusChange,
-                    supportingText = stringResource(R.string.hint_status),
+                    options = listOf(
+                        false to stringResource(statusLabel(state.type.completedStatus)),
+                        true to stringResource(R.string.status_scheduled),
+                    ),
+                    selected = state.scheduled,
+                    onSelect = actions.onScheduledChange,
+                    supportingText = stringResource(
+                        R.string.hint_status,
+                        stringResource(statusLabel(state.type.completedStatus)),
+                    ),
                 )
             }
             state.error?.let {
@@ -166,7 +172,8 @@ fun TransactionEditorScreen(state: TransactionEditorState, actions: TransactionE
 
 @Composable
 private fun TypeSelector(selected: TransactionType, onSelect: (TransactionType) -> Unit) {
-    val types = TransactionType.entries
+    // Adjustments are created from account settings ("Adjust balance"), not here.
+    val types = listOf(TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER)
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         types.forEachIndexed { index, type ->
             SegmentedButton(
@@ -210,9 +217,19 @@ fun typeLabel(type: TransactionType): Int = when (type) {
     TransactionType.INCOME -> R.string.type_income
     TransactionType.EXPENSE -> R.string.type_expense
     TransactionType.TRANSFER -> R.string.type_transfer
+    TransactionType.ADJUSTMENT -> R.string.type_adjustment
 }
 
 fun statusLabel(status: TransactionStatus): Int = when (status) {
     TransactionStatus.SCHEDULED -> R.string.status_scheduled
     TransactionStatus.SPENT -> R.string.status_spent
+    TransactionStatus.RECEIVED -> R.string.status_received
+    TransactionStatus.COMPLETED -> R.string.status_completed
+}
+
+/** Action that turns a scheduled entry of this type into its completed status. */
+fun markCompletedLabel(type: TransactionType): Int = when (type) {
+    TransactionType.INCOME -> R.string.action_mark_received
+    TransactionType.EXPENSE -> R.string.action_mark_spent
+    TransactionType.TRANSFER, TransactionType.ADJUSTMENT -> R.string.action_mark_completed
 }

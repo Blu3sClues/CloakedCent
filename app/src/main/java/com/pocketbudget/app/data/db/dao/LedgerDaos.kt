@@ -41,11 +41,12 @@ data class TransactionListRow(
     @ColumnInfo(name = "category_name") val categoryName: String?,
     @ColumnInfo(name = "payee_name") val payeeName: String?,
     @ColumnInfo(name = "counterpart_account_name") val counterpartAccountName: String?,
+    @ColumnInfo(name = "is_adjustment") val isAdjustment: Boolean,
 )
 
 private const val BALANCE_SELECT = """
     SELECT a.*,
-        COALESCE(SUM(CASE WHEN t.status = 'SPENT' THEN t.amount_cents END), 0) AS current_cents,
+        COALESCE(SUM(CASE WHEN t.status <> 'SCHEDULED' THEN t.amount_cents END), 0) AS current_cents,
         COALESCE(SUM(t.amount_cents), 0) AS projected_cents
     FROM accounts a
     LEFT JOIN transactions t ON t.account_id = a.id AND t.is_deleted = 0
@@ -174,6 +175,7 @@ interface TransactionDao {
             AND (:endInclusive IS NULL OR t.occurred_on <= :endInclusive)
             AND (:filterCategory = 0 OR t.category_id IN (:categoryIds))
             AND (:payeeId IS NULL OR t.payee_id = :payeeId)
+            AND (:scheduled IS NULL OR (t.status = 'SCHEDULED') = :scheduled)
             AND (:query IS NULL
                 OR p.name LIKE :query ESCAPE '\' OR c.name LIKE :query ESCAPE '\'
                 OR t.note LIKE :query ESCAPE '\' OR a.name LIKE :query ESCAPE '\')
@@ -189,13 +191,14 @@ interface TransactionDao {
         filterCategory: Boolean,
         categoryIds: List<Long>,
         payeeId: Long?,
+        scheduled: Boolean?,
     ): Flow<List<TransactionListRow>>
 
     @Query(
         """
         SELECT t.id, t.type, t.status, t.amount_cents, t.occurred_on, t.account_id,
             a.name AS account_name, t.category_id, c.name AS category_name,
-            t.payee_id, p.name AS payee_name, t.note, t.revision, t.is_deleted,
+            t.payee_id, p.name AS payee_name, t.note, t.revision, t.is_deleted, t.is_adjustment,
             t.created_at, t.updated_at,
             t2.account_id AS counterpart_account_id, a2.name AS counterpart_account_name
         FROM transactions t
@@ -229,7 +232,8 @@ private const val LIST_SELECT = """
     SELECT t.id, t.type, t.status, t.amount_cents, t.occurred_on,
         a.name AS account_name, c.name AS category_name, p.name AS payee_name,
         (SELECT a2.name FROM transactions t2 JOIN accounts a2 ON a2.id = t2.account_id
-            WHERE t2.transfer_id = t.transfer_id AND t2.id <> t.id) AS counterpart_account_name
+            WHERE t2.transfer_id = t.transfer_id AND t2.id <> t.id) AS counterpart_account_name,
+        t.is_adjustment
     FROM transactions t
     JOIN accounts a ON a.id = t.account_id
     LEFT JOIN categories c ON c.id = t.category_id
@@ -251,6 +255,7 @@ data class TransactionDetailRow(
     val note: String?,
     val revision: Int,
     @ColumnInfo(name = "is_deleted") val isDeleted: Boolean,
+    @ColumnInfo(name = "is_adjustment") val isAdjustment: Boolean,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
     @ColumnInfo(name = "counterpart_account_id") val counterpartAccountId: Long?,

@@ -11,13 +11,18 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 object LedgerSchema {
 
+    /** Sign, linkage and the type-specific status for each entry type. */
     private const val VALID_ENTRY = """
-        (NEW.type = 'INCOME' AND NEW.amount_cents > 0 AND NEW.transfer_id IS NULL)
-        OR (NEW.type = 'EXPENSE' AND NEW.amount_cents < 0 AND NEW.transfer_id IS NULL)
+        (NEW.type = 'INCOME' AND NEW.amount_cents > 0 AND NEW.transfer_id IS NULL
+            AND NEW.status IN ('SCHEDULED', 'RECEIVED'))
+        OR (NEW.type = 'EXPENSE' AND NEW.amount_cents < 0 AND NEW.transfer_id IS NULL
+            AND NEW.status IN ('SCHEDULED', 'SPENT'))
         OR (NEW.type = 'TRANSFER' AND NEW.amount_cents <> 0 AND NEW.transfer_id IS NOT NULL
-            AND NEW.category_id IS NULL)
+            AND NEW.category_id IS NULL AND NEW.is_adjustment = 0
+            AND NEW.status IN ('SCHEDULED', 'COMPLETED'))
+        OR (NEW.type = 'ADJUSTMENT' AND NEW.amount_cents <> 0 AND NEW.transfer_id IS NULL
+            AND NEW.category_id IS NULL AND NEW.is_adjustment = 1 AND NEW.status = 'COMPLETED')
     """
-    private const val VALID_STATUS = "NEW.status IN ('SCHEDULED', 'SPENT')"
 
     /** Triggers whose SQL changed in a later schema version; migrations drop them so onOpen recreates them. */
     val STATUS_TRIGGERS = listOf("trg_transactions_validate_insert", "trg_transactions_validate_update")
@@ -26,15 +31,15 @@ object LedgerSchema {
         """
         CREATE TRIGGER IF NOT EXISTS trg_transactions_validate_insert
         BEFORE INSERT ON transactions
-        WHEN NOT (($VALID_ENTRY) AND $VALID_STATUS)
+        WHEN NOT ($VALID_ENTRY)
         BEGIN SELECT RAISE(ABORT, 'transaction violates ledger rules'); END
         """,
         """
         CREATE TRIGGER IF NOT EXISTS trg_transactions_validate_update
         BEFORE UPDATE ON transactions
-        WHEN NOT (($VALID_ENTRY) AND $VALID_STATUS)
+        WHEN NOT ($VALID_ENTRY)
             OR NEW.account_id <> OLD.account_id OR NEW.type <> OLD.type
-            OR NEW.transfer_id IS NOT OLD.transfer_id
+            OR NEW.transfer_id IS NOT OLD.transfer_id OR NEW.is_adjustment <> OLD.is_adjustment
         BEGIN SELECT RAISE(ABORT, 'transaction violates ledger rules'); END
         """,
         """

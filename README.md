@@ -174,13 +174,19 @@ The `app_metadata` table is reserved for backup and installation metadata.
 Income and expenses are entry *types* in one ledger rather than separate tables,
 so every balance comes from a single source and nothing can be double counted.
 
-- **Status:** `SPENT` (the default: money has moved; used for income too) or
-  `SCHEDULED` (planned, money has not moved). Balances are reported as
-  *current* (spent only) and *projected* (current + scheduled). Scheduled entries
-  never appear in current balances or monthly income/spending. "Mark as spent"
-  converts SCHEDULED → SPENT exactly once (both legs for transfers) and records
-  the change in the audit history. Schema v3 migrated the former `PENDING` and
-  `CLEARED` statuses to `SPENT`.
+- **Status** is type-specific once money has moved: income `RECEIVED`, expense
+  `SPENT`, transfer and balance adjustment `COMPLETED` (the defaults). Any type
+  except adjustments can instead be `SCHEDULED` (planned, money has not moved).
+  Database triggers reject mismatched combinations. Balances are reported as
+  *current* (everything not scheduled) and *projected* (current + scheduled).
+  Confirming a scheduled entry moves it to its type's status exactly once (both
+  transfer legs atomically) and is recorded in the audit history. Schema v3
+  merged `PENDING`/`CLEARED` into `SPENT`; v4 split `SPENT` by type.
+- **Balance adjustments** ("Adjust balance" in account settings) are recorded as
+  new ledger entries (`is_adjustment = 1`), never by rewriting balances. The
+  opening balance is set only at creation. Classification: *balance only*
+  (type `ADJUSTMENT`, excluded from income/expense), *income* (increases only),
+  or *expense* (decreases only).
 - **Amounts in forms** are typed freely and shown as currency (e.g. `$38.00`)
   when the field loses focus; `AmountInput` parses locale grouping/decimal
   separators to exact cents.

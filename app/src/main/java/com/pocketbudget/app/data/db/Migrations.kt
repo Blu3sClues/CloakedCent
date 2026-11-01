@@ -63,5 +63,32 @@ object Migrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+    /**
+     * v4: type-specific completed statuses (income RECEIVED, expense SPENT, transfer
+     * COMPLETED) and the is_adjustment flag for "Adjust balance" entries. SCHEDULED
+     * is untouched. Revision snapshots are relabelled by their own recorded type.
+     * Triggers are dropped for the rewrite and recreated with v4 rules on open.
+     */
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            (LedgerSchema.STATUS_TRIGGERS + "trg_revisions_immutable_update").forEach {
+                db.execSQL("DROP TRIGGER IF EXISTS $it")
+            }
+            db.execSQL("ALTER TABLE `transactions` ADD COLUMN `is_adjustment` INTEGER NOT NULL DEFAULT 0")
+            listOf("transactions", "transaction_revisions").forEach { table ->
+                db.execSQL(
+                    """
+                    UPDATE $table SET status = CASE type
+                        WHEN 'INCOME' THEN 'RECEIVED'
+                        WHEN 'EXPENSE' THEN 'SPENT'
+                        WHEN 'TRANSFER' THEN 'COMPLETED'
+                        ELSE status END
+                    WHERE status = 'SPENT'
+                    """,
+                )
+            }
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 }
