@@ -18,6 +18,17 @@ import com.pocketbudget.app.ui.feature.budget.ARG_BUDGET_ID
 import com.pocketbudget.app.ui.feature.budget.BudgetDetailRoute
 import com.pocketbudget.app.ui.feature.budget.BudgetEditorRoute
 import com.pocketbudget.app.ui.feature.budget.BudgetsRoute
+import android.net.Uri
+import com.pocketbudget.app.domain.model.AnalysisPeriod
+import com.pocketbudget.app.ui.feature.analysis.ARG_ANALYSIS_ID
+import com.pocketbudget.app.ui.feature.analysis.ARG_ANALYSIS_KEY
+import com.pocketbudget.app.ui.feature.analysis.ARG_ANALYSIS_PERIOD
+import com.pocketbudget.app.ui.feature.analysis.AnalysisNavigation
+import com.pocketbudget.app.ui.feature.analysis.AnalysisRoute
+import com.pocketbudget.app.ui.feature.analysis.BrandAnalysisRoute
+import com.pocketbudget.app.ui.feature.analysis.CategoryAnalysisRoute
+import com.pocketbudget.app.ui.feature.analysis.LocationAnalysisRoute
+import com.pocketbudget.app.ui.feature.analysis.ProductAnalysisRoute
 import com.pocketbudget.app.ui.feature.receipt.ARG_PRODUCT_ID
 import com.pocketbudget.app.ui.feature.receipt.ARG_RECEIPT_ID
 import com.pocketbudget.app.ui.feature.receipt.ProductRoute
@@ -49,6 +60,19 @@ private object Routes {
     const val RECEIPT = "receipt/{$ARG_RECEIPT_ID}"
     const val PRODUCTS = "products"
     const val PRODUCT = "product/{$ARG_PRODUCT_ID}"
+
+    const val ANALYSIS = "analysis"
+    private const val P = "$ARG_ANALYSIS_PERIOD={$ARG_ANALYSIS_PERIOD}"
+    const val ANALYSIS_CATEGORY = "analysis/category/{$ARG_ANALYSIS_ID}?$P"
+    const val ANALYSIS_BRAND = "analysis/store?$ARG_ANALYSIS_KEY={$ARG_ANALYSIS_KEY}&$P"
+    const val ANALYSIS_LOCATION = "analysis/location/{$ARG_ANALYSIS_ID}?$P"
+    const val ANALYSIS_PRODUCT = "analysis/product/{$ARG_ANALYSIS_ID}?$P"
+
+    fun analysisCategory(id: Long, period: AnalysisPeriod) = "analysis/category/$id?$ARG_ANALYSIS_PERIOD=${period.encode()}"
+    fun analysisBrand(key: String, period: AnalysisPeriod) =
+        "analysis/store?$ARG_ANALYSIS_KEY=${Uri.encode(key)}&$ARG_ANALYSIS_PERIOD=${period.encode()}"
+    fun analysisLocation(id: Long, period: AnalysisPeriod) = "analysis/location/$id?$ARG_ANALYSIS_PERIOD=${period.encode()}"
+    fun analysisProduct(id: Long, period: AnalysisPeriod) = "analysis/product/$id?$ARG_ANALYSIS_PERIOD=${period.encode()}"
 
     fun receipt(id: Long) = "receipt/$id"
     fun product(id: Long) = "product/$id"
@@ -93,8 +117,27 @@ fun PocketBudgetNavHost() {
                 onOpenRecurring = { nav.navigate(Routes.RECURRING) },
                 onOpenUpcoming = { nav.navigate(Routes.UPCOMING) },
                 onOpenReceipts = { nav.navigate(Routes.RECEIPTS) },
+                onOpenAnalysis = { nav.navigate(Routes.ANALYSIS) },
             )
         }
+        val analysisNav = AnalysisNavigation(
+            onBack = back,
+            onCategory = { id, period -> nav.navigate(Routes.analysisCategory(id, period)) },
+            onBrand = { key, period -> nav.navigate(Routes.analysisBrand(key, period)) },
+            onLocation = { id, period -> nav.navigate(Routes.analysisLocation(id, period)) },
+            onProduct = { id, period -> nav.navigate(Routes.analysisProduct(id, period)) },
+            onEditProduct = { nav.navigate(Routes.product(it)) },
+        )
+        val periodArg = navArgument(ARG_ANALYSIS_PERIOD) { type = NavType.StringType; nullable = true; defaultValue = null }
+        val idArg = navArgument(ARG_ANALYSIS_ID) { type = NavType.LongType }
+        composable(Routes.ANALYSIS) { AnalysisRoute(analysisNav) }
+        composable(Routes.ANALYSIS_CATEGORY, listOf(idArg, periodArg)) { CategoryAnalysisRoute(analysisNav) }
+        composable(
+            Routes.ANALYSIS_BRAND,
+            listOf(navArgument(ARG_ANALYSIS_KEY) { type = NavType.StringType; defaultValue = "" }, periodArg),
+        ) { BrandAnalysisRoute(analysisNav) }
+        composable(Routes.ANALYSIS_LOCATION, listOf(idArg, periodArg)) { LocationAnalysisRoute(analysisNav) }
+        composable(Routes.ANALYSIS_PRODUCT, listOf(idArg, periodArg)) { ProductAnalysisRoute(analysisNav) }
         composable(Routes.RECEIPTS) {
             ReceiptsRoute(
                 onBack = back,

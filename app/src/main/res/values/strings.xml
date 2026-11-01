@@ -386,4 +386,76 @@
     <string name="product_brand">Brand</string>
     <string name="product_pack_size">Pack size</string>
     <string name="receipt_view">View receipt</string>
-</resources>
+    <!-- Spending analysis (Step 7) -->
+    <string name="analysis_title">Spending analysis</string>
+    <string name="analysis_tab_overview_short">Analysis</string>
+    <string name="analysis_tab_overview">Overview</string>
+    <string name="analysis_tab_categories">Categories</string>
+    <string name="analysis_tab_stores">Stores</string>
+    <string name="analysis_tab_products">Products</string>
+    <string name="period_last_7">7 days</string>
+    <string name="period_last_30">30 days</string>
+    <string name="period_last_90">90 days</string>
+    <string name="period_this_month">This month</string>
+    <string name="period_last_month">Last month</string>
+    <string name="period_this_year">This year</string>
+    <string name="period_last_year">Last year</string>
+    <string name="period_all_time">All time</string>
+    <string name="period_range">%1$s – %2$s</string>
+    <string name="analysis_total_spent">Total spent</string>
+    <string name="analysis_vs_previous">%1$s vs previous period (%2$s)</string>
+    <string name="analysis_no_previous">No spending in the previous period</string>
+    <string name="analysis_purchases">Purchases</string>
+    <string name="analysis_average_purchase">Average purchase</string>
+    <string name="analysis_trend">Spending trend</string>
+    <string name="analysis_top_categories">Top categories</string>
+    <string name="analysis_top_stores">Top stores</string>
+    <string name="analysis_top_products">Top products</string>
+    <string name="analysis_empty_title">No spending in this period</string>
+    <string name="analysis_empty_body">Completed expenses appear here. Scheduled, deleted, income, transfer and balance-adjustment entries are not counted.</string>
+    <string name="analysis_receipts_empty">Store and product analysis uses confirmed receipts. Scan a receipt to see it here.</string>
+    <string name="analysis_error">The analysis could not be loaded.</string>
+    <string name="analysis_uncategorised">Uncategorised</string>
+    <string name="analysis_share">%1$s of spending</string>
+    <string name="analysis_subcategories">Subcategories</string>
+    <string name="analysis_direct">Booked directly to %1$s</string>
+    <string name="analysis_visits">Visits</string>
+    <string name="analysis_average_receipt">Average receipt</string>
+    <string name="analysis_locations">Locations</string>
+    <string name="analysis_other_locations">Other locations of this store</string>
+    <string name="analysis_price_comparison">Price comparison across locations</string>
+    <string name="analysis_prices_here">Latest prices here</string>
+    <string name="analysis_items_note">Product amounts are item prices after item discounts, before tax.</string>
+    <string name="analysis_total_product">Total spent</string>
+    <string name="analysis_average_price">Average price</string>
+    <string name="analysis_frequency_single">Bought once in this period</string>
+    <string name="analysis_lowest">Lowest</string>
+    <string name="analysis_highest">Highest</string>
+    <string name="analysis_unit_average">Average unit price</string>
+    <string name="analysis_price_chart">Unit price over time</string>
+    <string name="analysis_by_location">By location</string>
+    <string name="analysis_by_store">By store</string>
+    <string name="analysis_history">Purchase history</string>
+    <string name="analysis_edit_product">Edit product</string>
+    <string name="analysis_unit_range">%1$s – %2$s</string>
+    <string name="analysis_location_unknown">No address</string>
+    <plurals name="analysis_location_count">
+        <item quantity="one">%1$d location</item>
+        <item quantity="other">%1$d locations</item>
+    </plurals>
+    <plurals name="analysis_visits_avg">
+        <item quantity="one">%1$d visit · avg %2$s</item>
+        <item quantity="other">%1$d visits · avg %2$s</item>
+    </plurals>
+    <plurals name="analysis_purchase_count">
+        <item quantity="one">%1$d purchase · %2$s</item>
+        <item quantity="other">%1$d purchases · %2$s</item>
+    </plurals>
+    <plurals name="analysis_frequency">
+        <item quantity="one">Bought every day on average</item>
+        <item quantity="other">Bought every %1$d days on average</item>
+    </plurals>
+    <plurals name="analysis_chart_description">
+        <item quantity="one">Chart of %1$d point from %2$s to %3$s</item>
+        <item quantity="other">Chart of %1$d points from %2$s to %3$s</item>
+    </plurals></resources>

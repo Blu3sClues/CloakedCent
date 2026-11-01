@@ -259,6 +259,24 @@ so every balance comes from a single source and nothing can be double counted.
   The price is in thousandths of a cent, calculated with exact integer
   arithmetic; lb, g and ml are converted. This is the data for Stage 7 price alerts.
 
+### Spending analysis
+
+- **Screens.** An overview, categories, stores (retailers and their locations) and
+  products. Periods: 7, 30 or 90 days; this or last month; this or last year; all
+  time; or a custom range. Each period is compared with the equally long period
+  before it.
+- **What counts as spending.** Completed, non-deleted expenses that are not balance
+  adjustments. Scheduled, deleted, income (including refunds recorded as income),
+  transfer and adjustment entries are excluded.
+- **Categories.** Split expenses count through their splits. A parent category's
+  total adds each descendant's amount exactly once.
+- **Stores and products.** These use confirmed receipts whose expense still counts;
+  each expense and each item is counted once. Product amounts are item prices after
+  item discounts, before tax.
+- **How it's computed.** Aggregation runs in SQLite (`AnalysisDao`) as Room Flows,
+  so results update when the data changes. Averages and percentages use
+  whole-cent, half-up integer arithmetic. No schema change was needed (still v6).
+
 - **Amounts in forms** are typed freely and shown as currency (e.g. `$38.00`)
   when the field loses focus; `AmountInput` parses locale grouping/decimal
   separators to exact cents.

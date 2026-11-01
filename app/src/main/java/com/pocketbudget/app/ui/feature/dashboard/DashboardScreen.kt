@@ -79,6 +79,7 @@ class DashboardActions(
     val onOpenRecurring: () -> Unit = {},
     val onOpenUpcoming: () -> Unit = {},
     val onOpenReceipts: () -> Unit = {},
+    val onOpenAnalysis: () -> Unit = {},
 )
 
 @Composable
@@ -93,6 +94,7 @@ fun DashboardRoute(
     onOpenRecurring: () -> Unit,
     onOpenUpcoming: () -> Unit,
     onOpenReceipts: () -> Unit,
+    onOpenAnalysis: () -> Unit,
     viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -111,6 +113,7 @@ fun DashboardRoute(
             onOpenRecurring = onOpenRecurring,
             onOpenUpcoming = onOpenUpcoming,
             onOpenReceipts = onOpenReceipts,
+            onOpenAnalysis = onOpenAnalysis,
         ),
     )
 }
@@ -170,6 +173,7 @@ private const val DASHBOARD_BUDGETS = 3
 private fun PlanningShortcuts(overdueCount: Int, actions: DashboardActions) {
     // Scrolls sideways on narrow screens instead of squeezing the labels.
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AssistChip(onClick = actions.onOpenAnalysis, label = { Text(stringResource(R.string.analysis_tab_overview_short)) })
         AssistChip(
             onClick = actions.onOpenReceipts,
             label = { Text(stringResource(R.string.receipts_title)) },

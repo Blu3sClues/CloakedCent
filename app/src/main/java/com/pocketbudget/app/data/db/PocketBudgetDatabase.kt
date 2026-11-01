@@ -4,6 +4,7 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.pocketbudget.app.data.db.dao.AccountDao
+import com.pocketbudget.app.data.db.dao.AnalysisDao
 import com.pocketbudget.app.data.db.dao.AppMetadataDao
 import com.pocketbudget.app.data.db.dao.BudgetDao
 import com.pocketbudget.app.data.db.dao.ReceiptDao
@@ -75,6 +76,7 @@ abstract class PocketBudgetDatabase : RoomDatabase() {
     abstract fun budgetDao(): BudgetDao
     abstract fun recurringDao(): RecurringDao
     abstract fun receiptDao(): ReceiptDao
+    abstract fun analysisDao(): AnalysisDao
 
     companion object {
         const val NAME = "pocket_budget.db"

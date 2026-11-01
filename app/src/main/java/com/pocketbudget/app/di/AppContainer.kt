@@ -17,8 +17,10 @@ import com.pocketbudget.app.domain.repository.PayeeRepository
 import com.pocketbudget.app.data.receipt.MediaKeyProvider
 import com.pocketbudget.app.data.receipt.ReceiptImageStore
 import com.pocketbudget.app.data.receipt.TesseractOcrEngine
+import com.pocketbudget.app.data.repository.RoomAnalysisRepository
 import com.pocketbudget.app.data.repository.RoomProductRepository
 import com.pocketbudget.app.data.repository.RoomReceiptRepository
+import com.pocketbudget.app.domain.repository.AnalysisRepository
 import com.pocketbudget.app.domain.repository.ProductRepository
 import com.pocketbudget.app.domain.repository.ReceiptRepository
 import com.pocketbudget.app.data.repository.RoomBudgetRepository
@@ -83,6 +85,7 @@ class AppContainer(context: Context) {
         )
     }
     val productRepository: ProductRepository by lazy { RoomProductRepository({ database }) }
+    val analysisRepository: AnalysisRepository by lazy { RoomAnalysisRepository({ database }) }
 
     /** Debug builds only (see src/debug); null in release. */
     val sampleSeeder: (suspend () -> Unit)? = SampleData.seeder(this)
