@@ -34,7 +34,6 @@ import com.pocketbudget.app.domain.model.PackSizes
 import com.pocketbudget.app.domain.model.PageInput
 import com.pocketbudget.app.domain.model.PriceObservation
 import com.pocketbudget.app.domain.model.Product
-import com.pocketbudget.app.domain.model.ProductMatcher
 import com.pocketbudget.app.domain.model.ProductSummary
 import com.pocketbudget.app.domain.model.ReceiptDetail
 import com.pocketbudget.app.domain.model.ReceiptException
@@ -149,10 +148,8 @@ class RoomReceiptRepository(
             val dao = db.receiptDao()
             val receipt = dao.getById(id)?.takeIf { it.isEditable } ?: return@write
             val store = dao.findStores(TextKeys.storeKey(parsed.review.storeName)).firstOrNull()
-            val review = parsed.review.copy(
-                items = suggestProducts(db, store?.id, parsed.review.items),
-                defaultCategoryId = store?.let { dao.lastDefaultCategory(it.id) },
-            )
+            // No default category is guessed: unrecognised items stay unassigned for the user.
+            val review = parsed.review.copy(items = suggestProducts(db, store?.id, parsed.review.items))
             dao.deleteOcrLines(id)
             dao.insertOcrLines(lines.map { it.toEntity(id) })
             dao.deleteItems(id)
@@ -172,28 +169,35 @@ class RoomReceiptRepository(
         }
     }
 
-    /** Store-specific aliases learned from corrections win; otherwise products with a matching name. */
+    /**
+     * Recognises products: the store's wording learned from earlier corrections first,
+     * otherwise a product whose name has exactly the same key. A recognised product's
+     * learned category is reused; anything else keeps its OCR text and stays
+     * uncategorised. Similar-looking names are never applied automatically, because a
+     * guessed product would bring a guessed category with it.
+     */
     private suspend fun suggestProducts(db: PocketBudgetDatabase, storeId: Long?, items: List<ReceiptItemDraft>): List<ReceiptItemDraft> {
         val dao = db.receiptDao()
-        val candidates = dao.getProducts().map { ProductMatcher.Candidate(it.id, it.name) }
+        val storeAliases = storeId?.let { dao.getAliases(it) }.orEmpty()
         return items.map { item ->
-            val alias = storeId?.let { dao.getAlias(it, TextKeys.descriptionKey(item.rawText)) }
-            val aliased = alias?.let { dao.getProduct(it.productId) }
-            if (aliased != null) {
-                return@map item.copy(description = aliased.name, productId = aliased.id, categoryId = aliased.defaultCategoryId)
-            }
-            val (candidate, exact) = ProductMatcher.match(item.description, candidates) ?: return@map item
-            val product = dao.getProduct(candidate.productId) ?: return@map item
+            val key = TextKeys.descriptionKey(item.rawText)
+            var misread = false
+            val alias = storeId?.let { dao.getAlias(it, key) }
+                ?: storeAliases.filter { TextKeys.ocrKey(it.normalizedAlias) == TextKeys.ocrKey(key) }
+                    // Only when it points at one product; the user is asked to check it.
+                    .takeIf { matches -> matches.map { it.productId }.distinct().size == 1 }
+                    ?.first()?.also { misread = true }
+            val product = alias?.let { dao.getProduct(it.productId) }
+                ?: key.takeIf { it.isNotEmpty() }?.let { dao.getProductByName(it) }
+                ?: return@map item
             item.copy(
                 description = product.name,
                 productId = product.id,
                 categoryId = product.defaultCategoryId,
-                // A similar-but-not-equal name is only a guess.
-                uncertain = item.uncertain || !exact,
+                uncertain = item.uncertain || misread,
             )
         }
     }
-
     override fun observeSummaries(): Flow<List<ReceiptSummary>> = observe { db ->
         db.receiptDao().observeVisible().map { list ->
             list.map {
@@ -210,9 +214,12 @@ class RoomReceiptRepository(
     }
 
     override fun observeDetail(id: Long): Flow<ReceiptDetail?> = observe { db ->
-        val dao = db.receiptDao()
-        combine(dao.observe(id), dao.observeItems(id), dao.observeImages(id), dao.observeOcrLines(id)) { receipt, items, pages, lines ->
-            receipt ?: return@combine null
+        db.receiptDao().observeBundle(id).map { bundle ->
+            bundle ?: return@map null
+            val receipt = bundle.receipt
+            val items = bundle.items.sortedBy { it.position }
+            val pages = bundle.images.sortedBy { it.page }
+            val lines = bundle.ocrLines.sortedWith(compareBy({ it.page }, { it.lineIndex }))
             ReceiptDetail(
                 id = receipt.id,
                 status = receipt.status,

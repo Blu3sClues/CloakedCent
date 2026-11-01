@@ -23,6 +23,33 @@ class QuantityTextTest {
     }
 
     @Test
+    fun correctionsRecalculateSubtotalAndTotalExactly() {
+        val form = ReviewForm(
+            date = java.time.LocalDate.of(2026, 11, 14),
+            tax = "0.36",
+            discount = "",
+            subtotal = "99.99",
+            total = "99.99",
+            items = listOf(
+                ItemForm(key = 1, lineTotal = "3.49"),
+                ItemForm(key = 2, lineTotal = "5.00", discount = "0.50"),
+            ),
+            printedTotal = com.pocketbudget.app.core.money.Money(848),
+        )
+        val fixed = recalculated(form)
+        assertEquals(com.pocketbudget.app.core.money.Money(799), com.pocketbudget.app.ui.components.AmountInput.parse(fixed.subtotal))
+        assertEquals(com.pocketbudget.app.core.money.Money(835), com.pocketbudget.app.ui.components.AmountInput.parse(fixed.total))
+        // The printed total is kept for comparison, never overwritten.
+        assertEquals(com.pocketbudget.app.core.money.Money(848), fixed.printedTotal)
+        // A receipt discount and tax both apply.
+        val withCoupon = recalculated(fixed.copy(discount = "1.00"))
+        assertEquals(com.pocketbudget.app.core.money.Money(735), com.pocketbudget.app.ui.components.AmountInput.parse(withCoupon.total))
+        // While an amount is half-typed nothing is recalculated.
+        val typing = form.copy(items = form.items + ItemForm(key = 3, lineTotal = "1."))
+        assertEquals(typing, recalculated(typing))
+    }
+
+    @Test
     fun packSizesAreReadFromProductNames() {
         assertEquals(1000L to MeasureUnit.L, PackSizes.parse("Milk 2% 1L"))
         assertEquals(500_000L to MeasureUnit.G, PackSizes.parse("Coffee 500 g"))

@@ -333,6 +333,7 @@
     <string name="review_items_sum">Items after discounts</string>
     <string name="review_expected_total">Items − discounts + tax</string>
     <string name="review_balanced">Everything adds up.</string>
+    <string name="review_printed_total">The receipt shows a total of %1C:\Users\micro\Pocket Budget\app\src\main\res\values\strings.xml, but the items add up to %2C:\Users\micro\Pocket Budget\app\src\main\res\values\strings.xml. Check for missed or misread items.</string>
     <string name="review_difference">Off by %1$s. Check items, tax, discounts and total.</string>
     <string name="review_subtotal_difference">Items differ from the subtotal by %1$s.</string>
     <string name="review_expense">Expense</string>

@@ -158,6 +158,68 @@ class ReceiptParserTest {
     }
 
     @Test
+    fun descriptionsKeepShortWordsAndDropCodesAndMisreadFlags() {
+        val r = ReceiptParser.parse(
+            lines(
+                """
+                SUPER STORE
+                0007654321 TISSUES 2 PK      4.20
+                GV MILK 2% 078742351865 F    3.48 N
+                VITAMIN C                    8.99 &
+                PAPER TOWEL XL               6.50 T*
+                TOTAL                       23.17
+                """,
+            ),
+        ).review
+        assertEquals(listOf("TISSUES 2 PK", "GV MILK 2%", "VITAMIN C", "PAPER TOWEL XL"), r.items.map { it.description })
+        // The OCR text is kept for history and alias learning.
+        assertEquals(r.items.map { it.description }, r.items.map { it.rawText })
+        assertTrue(ReceiptMath.reconcile(r).isEmpty())
+    }
+
+    @Test
+    fun garbledQuantityLinesStayWithTheirItemAndAreFlagged() {
+        val parsed = ReceiptParser.parse(
+            lines(
+                """
+                MARKET
+                BANANAS
+                4.25 kg @ 1.74/k8     2.18
+                BREAD                 2.79
+                TOTAL                 4.97
+                """,
+            ),
+        )
+        val bananas = parsed.review.items.first()
+        assertEquals("BANANAS", bananas.description)
+        assertEquals(Money(218), bananas.lineTotal)
+        assertTrue("unreadable quantity is flagged", bananas.uncertain)
+        assertFalse(parsed.review.items[1].uncertain)
+    }
+
+    @Test
+    fun tiltedPhotosStillGroupNamesWithTheirPrices() {
+        // Two printed rows photographed at about 3 degrees: the price column sits ~30 px
+        // lower than its name, more than half a line height, yet each stays on its row.
+        fun word(text: String, left: Int, top: Int) = OcrWord(text, 90, OcrBox(left, top, left + text.length * 20, top + 34))
+        fun tilt(x: Int) = x / 20
+        val words = listOf(
+            word("MILK", 60, 100 + tilt(60)), word("2%", 160, 100 + tilt(160)), word("1L", 220, 100 + tilt(220)),
+            word("3.49", 660, 100 + tilt(660)),
+            word("BREAD", 60, 150 + tilt(60)), word("WHOLE", 180, 150 + tilt(180)), word("WHEAT", 300, 150 + tilt(300)),
+            word("2.79", 660, 150 + tilt(660)),
+            word("TAX", 60, 200 + tilt(60)), word("0.36", 660, 200 + tilt(660)),
+        )
+        assertEquals(
+            listOf("MILK 2% 1L 3.49", "BREAD WHOLE WHEAT 2.79", "TAX 0.36"),
+            OcrLayout.rows(0, words).map { it.text },
+        )
+        // Short low-confidence specks from the paper edge are dropped.
+        val noisy = words + OcrWord("ae", 20, OcrBox(5, 100, 25, 130))
+        assertEquals("MILK 2% 1L 3.49", OcrLayout.rows(0, noisy).first().text)
+    }
+
+    @Test
     fun amountParsingIsExactWholeCents() {
         assertEquals(Money(123456), ReceiptParser.parseAmount("Total $1,234.56"))
         assertEquals(Money(1234), ReceiptParser.parseAmount("12,34"))

@@ -203,6 +203,8 @@ data class ReviewForm(
     val defaultCategoryId: Long? = null,
     val items: List<ItemForm> = emptyList(),
     val location: GeoPoint? = null,
+    /** The total as read from the receipt, kept for comparison when items are corrected. */
+    val printedTotal: Money? = null,
 )
 
 sealed interface ExpenseChoice {
@@ -249,6 +251,9 @@ class ReceiptReviewViewModel(
     private var nextKey = 0L
     private var rebuildForm = true
 
+    /** Set once the user changes anything, so later data never overwrites their edits. */
+    private var edited = false
+
     init {
         viewModelScope.launch {
             val list = accounts.observeBalances().first().map { it.account.id to it.account.name }
@@ -267,7 +272,9 @@ class ReceiptReviewViewModel(
                 detail ?: return@collect
                 if (_state.value.pages.isEmpty() && detail.pages.isNotEmpty()) loadPages(detail)
                 val ready = detail.status != ReceiptStatus.DRAFT || detail.ocrError != null
-                if (rebuildForm && ready) {
+                // Also rebuild an untouched form that was built before the items arrived.
+                val itemsArrived = !edited && _state.value.form?.items?.isEmpty() == true && detail.review.items.isNotEmpty()
+                if ((rebuildForm || itemsArrived) && ready) {
                     rebuildForm = false
                     _state.update { it.copy(form = formOf(detail)) }
                     if (detail.status == ReceiptStatus.NEEDS_REVIEW || detail.status == ReceiptStatus.DRAFT) refreshChecks()
@@ -336,6 +343,7 @@ class ReceiptReviewViewModel(
 
     fun readAgain() {
         rebuildForm = true
+        edited = false
         _state.update { it.copy(form = null) }
         read()
     }
@@ -372,17 +380,24 @@ class ReceiptReviewViewModel(
                 )
             },
             location = r.location,
+            printedTotal = r.total,
         )
     }
 
-    fun edit(change: (ReviewForm) -> ReviewForm) = _state.update { s -> s.copy(form = s.form?.let(change), message = null) }
+    fun edit(change: (ReviewForm) -> ReviewForm) {
+        edited = true
+        _state.update { s -> s.copy(form = s.form?.let(change), message = null) }
+    }
 
     fun editItem(key: Long, change: (ItemForm) -> ItemForm) =
-        edit { f -> f.copy(items = f.items.map { if (it.key == key) change(it) else it }) }
+        edit { f -> recalculated(f.copy(items = f.items.map { if (it.key == key) change(it) else it })) }
+
+    /** Tax and receipt-level discounts change the total. */
+    fun editAdjustments(change: (ReviewForm) -> ReviewForm) = edit { recalculated(change(it)) }
 
     fun addItem() = edit { it.copy(items = it.items + ItemForm(key = nextKey++)) }
 
-    fun removeItem(key: Long) = edit { f -> f.copy(items = f.items.filterNot { it.key == key }) }
+    fun removeItem(key: Long) = edit { f -> recalculated(f.copy(items = f.items.filterNot { it.key == key })) }
 
     fun highlight(source: OcrSource?) = _state.update { it.copy(highlight = source) }
 
@@ -481,6 +496,23 @@ class ReceiptReviewViewModel(
             }
         }
     }
+}
+
+/**
+ * After a correction, the subtotal becomes the items after their discounts and the total
+ * subtotal - receipt discounts + tax, in exact cents. Left alone while any amount is not
+ * yet a valid number, so typing is never interrupted.
+ */
+internal fun recalculated(form: ReviewForm): ReviewForm {
+    val nets = form.items.map { item ->
+        val line = AmountInput.parse(item.lineTotal) ?: return form
+        val discount = if (item.discount.isBlank()) Money.ZERO else AmountInput.parse(item.discount) ?: return form
+        line - discount
+    }
+    val tax = if (form.tax.isBlank()) Money.ZERO else AmountInput.parse(form.tax) ?: return form
+    val discount = if (form.discount.isBlank()) Money.ZERO else AmountInput.parse(form.discount) ?: return form
+    val subtotal = nets.fold(Money.ZERO) { sum, it -> sum + it }
+    return form.copy(subtotal = AmountInput.format(subtotal), total = AmountInput.format(subtotal - discount + tax))
 }
 
 private fun money(text: String, required: Boolean): Money? {
@@ -765,12 +797,12 @@ private fun ReviewEditor(state: ReviewUiState, vm: ReceiptReviewViewModel, onOpe
         supportingText = if (ReceiptField.SUBTOTAL in uncertain) check else null,
     )
     MoneyField(
-        form.discount, { v -> vm.edit { it.copy(discount = v) } }, stringResource(R.string.field_discount),
+        form.discount, { v -> vm.editAdjustments { it.copy(discount = v) } }, stringResource(R.string.field_discount),
         modifier = focusOn(ReceiptField.DISCOUNT), isError = ReceiptField.DISCOUNT in uncertain,
         supportingText = if (ReceiptField.DISCOUNT in uncertain) check else null,
     )
     MoneyField(
-        form.tax, { v -> vm.edit { it.copy(tax = v) } }, stringResource(R.string.field_tax),
+        form.tax, { v -> vm.editAdjustments { it.copy(tax = v) } }, stringResource(R.string.field_tax),
         modifier = focusOn(ReceiptField.TAX), isError = ReceiptField.TAX in uncertain,
         supportingText = if (ReceiptField.TAX in uncertain) check else null,
     )
@@ -780,6 +812,7 @@ private fun ReviewEditor(state: ReviewUiState, vm: ReceiptReviewViewModel, onOpe
         supportingText = if (ReceiptField.TOTAL in uncertain) check else null,
     )
     ReconcileSummary(form)
+    PrintedTotalCheck(form)
 
     SectionHeader(stringResource(R.string.review_expense))
     ExpenseTarget(state, vm)
@@ -876,6 +909,21 @@ private fun ReconcileSummary(form: ReviewForm) {
                 }
             }
         }
+    }
+}
+
+/** Warns when the corrected items no longer add up to what the receipt printed. */
+@Composable
+private fun PrintedTotalCheck(form: ReviewForm) {
+    val printed = form.printedTotal ?: return
+    val total = AmountInput.parse(form.total) ?: return
+    if (total == printed) return
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+        Text(
+            stringResource(R.string.review_printed_total, AmountInput.format(printed), AmountInput.format(total)),
+            Modifier.padding(12.dp),
+            color = MaterialTheme.colorScheme.onErrorContainer,
+        )
     }
 }
 

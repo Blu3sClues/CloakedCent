@@ -270,6 +270,20 @@ object TextKeys {
         return kept.joinToString("")
     }
 
+    /**
+     * [descriptionKey] with letters and digits that OCR commonly confuses folded together
+     * (I/L/1, O/0, S/5, B/8). Only for comparing one store's printed wording with itself.
+     */
+    fun ocrKey(text: String): String = descriptionKey(text).map { ch ->
+        when (ch) {
+            'I', 'L' -> '1'
+            'O' -> '0'
+            'S' -> '5'
+            'B' -> '8'
+            else -> ch
+        }
+    }.joinToString("")
+
     private fun isNumber(token: String) = token.isNotEmpty() && token.all { it.isDigit() || it == '.' } && token.first().isDigit()
 
     /** "1.0" -> "1", "1.50" -> "1.5". */

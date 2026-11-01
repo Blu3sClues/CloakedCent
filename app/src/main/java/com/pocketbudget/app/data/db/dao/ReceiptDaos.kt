@@ -2,9 +2,12 @@ package com.pocketbudget.app.data.db.dao
 
 import androidx.room.ColumnInfo
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Relation
+import androidx.room.Transaction
 import androidx.room.Update
 import com.pocketbudget.app.data.db.entity.PriceObservationEntity
 import com.pocketbudget.app.data.db.entity.ProductAliasEntity
@@ -20,6 +23,17 @@ import com.pocketbudget.app.domain.model.MeasureUnit
 import com.pocketbudget.app.domain.model.TransactionStatus
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
+
+/**
+ * A receipt with everything shown on its review screen, read in one transaction so the
+ * screen never sees updated receipt fields alongside items from before an OCR run.
+ */
+data class ReceiptBundle(
+    @Embedded val receipt: ReceiptEntity,
+    @Relation(parentColumn = "id", entityColumn = "receipt_id") val items: List<ReceiptItemEntity>,
+    @Relation(parentColumn = "id", entityColumn = "receipt_id") val images: List<ReceiptImageEntity>,
+    @Relation(parentColumn = "id", entityColumn = "receipt_id") val ocrLines: List<ReceiptOcrLineEntity>,
+)
 
 /** An image hash belonging to a receipt that is not discarded. */
 data class ImageHashRow(
@@ -67,6 +81,10 @@ interface ReceiptDao {
 
     @Query("SELECT * FROM receipts WHERE id = :id")
     fun observe(id: Long): Flow<ReceiptEntity?>
+
+    @Transaction
+    @Query("SELECT * FROM receipts WHERE id = :id")
+    fun observeBundle(id: Long): Flow<ReceiptBundle?>
 
     @Query("SELECT * FROM receipts WHERE status <> 'DISCARDED' ORDER BY created_at DESC")
     fun observeVisible(): Flow<List<ReceiptEntity>>
@@ -141,15 +159,6 @@ interface ReceiptDao {
     @Insert
     suspend fun insertItem(item: ReceiptItemEntity): Long
 
-    /** The default category used on this store's most recent confirmed receipt. */
-    @Query(
-        """
-        SELECT default_category_id FROM receipts
-        WHERE store_id = :storeId AND status = 'CONFIRMED' AND default_category_id IS NOT NULL
-        ORDER BY confirmed_at DESC LIMIT 1
-        """,
-    )
-    suspend fun lastDefaultCategory(storeId: Long): Long?
 
     @Update
     suspend fun updateItem(item: ReceiptItemEntity)
@@ -202,6 +211,9 @@ interface ReceiptDao {
 
     @Query("SELECT * FROM product_aliases WHERE store_id = :storeId AND normalized_alias = :alias")
     suspend fun getAlias(storeId: Long, alias: String): ProductAliasEntity?
+
+    @Query("SELECT * FROM product_aliases WHERE store_id = :storeId")
+    suspend fun getAliases(storeId: Long): List<ProductAliasEntity>
 
     @Insert
     suspend fun insertAlias(alias: ProductAliasEntity): Long

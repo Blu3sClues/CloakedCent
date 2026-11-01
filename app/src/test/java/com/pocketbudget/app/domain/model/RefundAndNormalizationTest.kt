@@ -95,6 +95,14 @@ class RefundAndNormalizationTest {
     }
 
     @Test
+    fun ocrKeysFoldCommonMisreadsButKeepRealDifferences() {
+        assertEquals(TextKeys.ocrKey("MILK 2% 1L"), TextKeys.ocrKey("MILK 2% IL"))
+        assertEquals(TextKeys.ocrKey("SOAP 500G"), TextKeys.ocrKey("S0AP 5OOG"))
+        assertNotEquals(TextKeys.ocrKey("MILK 2% 1L"), TextKeys.ocrKey("MILK 2% 2L"))
+        assertNotEquals(TextKeys.ocrKey("WHOLE MILK"), TextKeys.ocrKey("SKIM MILK"))
+    }
+
+    @Test
     fun fuzzyProductSuggestionsNeverCrossSizesOrVariants() {
         val products = listOf(ProductMatcher.Candidate(1, "Organic Whole Milk 2L"), ProductMatcher.Candidate(2, "Greek Yogurt Plain"))
         assertEquals(1L, ProductMatcher.match("WHOLE MILK ORGANIC 2 L", products)!!.first.productId)

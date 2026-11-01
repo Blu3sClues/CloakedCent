@@ -11,23 +11,33 @@ data class OcrWord(val text: String, val confidence: Int, val box: OcrBox)
 object OcrLayout {
     /**
      * Rebuilds printed rows from words. OCR engines often read a receipt's names and
-     * prices as separate columns; words whose vertical centres fall within each other's
-     * height belong to the same row, read left to right. Row confidence is the average
-     * of its words, weighted by length.
+     * prices as separate columns, and photos are rarely level. The page's tilt is
+     * measured from neighbouring words on the same line; each word's vertical centre is
+     * then corrected for that tilt, and words whose corrected centres lie within half a
+     * line height of a row's centre join it, read left to right. Row confidence is the
+     * average of its words, weighted by length.
      */
     fun rows(page: Int, words: List<OcrWord>): List<OcrLine> {
-        val rows = mutableListOf<MutableList<OcrWord>>()
-        for (word in words.filter { it.text.isNotBlank() }.sortedBy { it.box.top + it.box.bottom }) {
-            val centre = (word.box.top + word.box.bottom) / 2
-            val row = rows.lastOrNull()?.takeIf { row ->
-                val top = row.minOf { it.box.top }
-                val bottom = row.maxOf { it.box.bottom }
-                val rowCentre = (top + bottom) / 2
-                centre in top..bottom && rowCentre in word.box.top..word.box.bottom
+        // Specks on the paper edge or the table read as short, low-confidence fragments.
+        val usable = words.filter { it.text.isNotBlank() && it.box.bottom > it.box.top && !isNoise(it) }
+        if (usable.isEmpty()) return emptyList()
+        val lineHeight = usable.map { it.box.bottom - it.box.top }.sorted()[usable.size / 2].toDouble()
+        val slope = slope(usable, lineHeight)
+        fun centreX(w: OcrWord) = (w.box.left + w.box.right) / 2.0
+        fun level(w: OcrWord) = (w.box.top + w.box.bottom) / 2.0 - slope * centreX(w)
+
+        val rows = mutableListOf<Pair<MutableList<OcrWord>, Double>>() // words, mean corrected centre
+        for (word in usable.sortedBy(::level)) {
+            val y = level(word)
+            val row = rows.lastOrNull()?.takeIf { Math.abs(y - it.second) <= lineHeight * 0.55 }
+            if (row == null) {
+                rows += mutableListOf(word) to y
+            } else {
+                row.first += word
+                rows[rows.lastIndex] = row.first to (row.second * (row.first.size - 1) + y) / row.first.size
             }
-            if (row != null) row += word else rows += mutableListOf(word)
         }
-        return rows.mapIndexed { index, row ->
+        return rows.mapIndexed { index, (row, _) ->
             val ordered = row.sortedBy { it.box.left }
             val weight = ordered.sumOf { it.text.length }
             OcrLine(
@@ -44,8 +54,30 @@ object OcrLayout {
             )
         }
     }
-}
 
+    private fun isNoise(word: OcrWord): Boolean =
+        word.confidence < 40 && word.text.length <= 3 && word.text.none(Char::isDigit)
+
+    /**
+     * Median vertical slope between each word and the nearest word to its right on the
+     * same line (close and nearly level). Zero when there are no such pairs. Pixel
+     * geometry only; never used for amounts.
+     */
+    private fun slope(words: List<OcrWord>, lineHeight: Double): Double {
+        val slopes = words.mapNotNull { word ->
+            val cy = (word.box.top + word.box.bottom) / 2.0
+            words.filter { other ->
+                other !== word && other.box.left >= word.box.right - lineHeight * 0.2 &&
+                    other.box.left - word.box.right < lineHeight * 3 &&
+                    Math.abs((other.box.top + other.box.bottom) / 2.0 - cy) < lineHeight * 0.5
+            }.minByOrNull { it.box.left }?.let { next ->
+                val dx = (next.box.left + next.box.right) / 2.0 - (word.box.left + word.box.right) / 2.0
+                if (dx <= 0) null else ((next.box.top + next.box.bottom) / 2.0 - cy) / dx
+            }
+        }.sorted()
+        return if (slopes.isEmpty()) 0.0 else slopes[slopes.size / 2]
+    }
+}
 /** What the parser could read from OCR lines. Every value is a suggestion for the user to verify. */
 data class ParsedReceipt(
     val review: ReceiptReview,
@@ -64,13 +96,15 @@ object ReceiptParser {
     const val CONFIDENT = 75
 
     private const val AMOUNT = """(-)?\s?\$?\s?(\d{1,3}(?:,\d{3})+|\d+)\s?[.,]\s?(\d{2})\s?(-)?"""
-    private val TRAILING_AMOUNT = Regex("""$AMOUNT(?:\s+[A-Z*]{1,2})?$""", RegexOption.IGNORE_CASE)
+    // Receipts print tax flags after prices (F, T, N, *); OCR often reads them as other marks.
+    private val TRAILING_AMOUNT = Regex("""$AMOUNT(?:\s+[^\s\d]{1,2})?$""", RegexOption.IGNORE_CASE)
     private val ANY_AMOUNT = Regex(AMOUNT)
     private val COUNT_AT_PRICE = Regex("""(\d{1,3})\s*[@xX]\s*\$?\s?(\d+)[.,](\d{2})""")
     private val WEIGHT_AT_PRICE = Regex(
         """(\d+(?:[.,]\d{1,3})?)\s*(kg|g|lbs?|ml|l)\b\s*@\s*\$?\s?(\d+)[.,](\d{2})\s*/\s*(kg|g|lbs?|ml|l)\b""",
         RegexOption.IGNORE_CASE,
     )
+    private val LOOSE_COUNT = Regex("""^(\d{1,3})\s+\$?(\d+)[.,](\d{2})$""")
     private val ITEM_CODE = Regex("""^\d{5,}\s+""")
     private val ISO_DATE = Regex("""\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b""")
     private val NUMERIC_DATE = Regex("""\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{4}|\d{2})\b""")
@@ -175,9 +209,21 @@ object ReceiptParser {
                     var descriptionLine = line
                     var description = descriptionOf(rest)
                     var quantity = lineQuantity
+                    // "3 1.29   3.87": OCR dropped the @; accepted only when count x price is exact.
+                    if (quantity == null) {
+                        LOOSE_COUNT.matchEntire(description)?.let { m ->
+                            val count = m.groupValues[1].toLong()
+                            val price = m.groupValues[2].toLong() * 100 + m.groupValues[3].toLong()
+                            if (count > 0 && count * price == amount.money.cents) {
+                                quantity = Triple(count * 1000, MeasureUnit.EACH, Money(price))
+                            }
+                        }
+                    }
                     // "BANANAS" then "1.25 kg @ 1.74/kg   2.18": the amount line carries no name.
                     val previous = pendingDescription
-                    if (letters(description) < 3 && previous != null && previous.first == position - 1) {
+                    // A garbled quantity line still belongs to the name above it, and is flagged.
+                    val garbledQuantity = quantity == null && looksLikeQuantity(description)
+                    if ((letters(description) < 3 || garbledQuantity) && previous != null && previous.first == position - 1) {
                         descriptionLine = previous.second
                         description = descriptionOf(withoutQuantity(clean(previous.second.text)))
                         if (quantity == null) quantity = quantityOf(clean(previous.second.text))
@@ -196,7 +242,8 @@ object ReceiptParser {
                         unitPrice = quantity?.third,
                         lineTotal = amount.money,
                         confidence = confidence,
-                        uncertain = confidence < CONFIDENT || !quantityConsistent(quantity, amount.money),
+                        uncertain = confidence < CONFIDENT || !quantityConsistent(quantity, amount.money) ||
+                            (quantity == null && looksLikeQuantity(clean(line.text))),
                         source = OcrSource(descriptionLine.page, descriptionLine.index),
                     )
                     pendingDescription = null
@@ -312,16 +359,22 @@ object ReceiptParser {
     private fun withoutQuantity(text: String): String =
         text.replace(WEIGHT_AT_PRICE, " ").replace(COUNT_AT_PRICE, " ").replace(Regex("\\s+"), " ").trim()
 
+    /** The words before the line's price (flags after the price are dropped), without item codes. */
     private fun descriptionOf(text: String): String {
-        val withoutAmount = ANY_AMOUNT.findAll(text).lastOrNull()
-            ?.let { text.replaceRange(it.range, " ") }
-            ?: text
-        return withoutAmount.replace(Regex("""\s+[A-Z*]{1,2}$"""), "")
+        val beforeAmount = TRAILING_AMOUNT.find(text)?.let { text.substring(0, it.range.first) } ?: text
+        return beforeAmount
             .replace(ITEM_CODE, "")
+            // Item codes anywhere, with the single tax letter some stores print after them.
+            .replace(Regex("""(^|\s)\d{6,}(\s+[A-Z])?(?=\s|$)"""), " ")
+            .replace(Regex("\\s+"), " ")
             .trim()
             .trimEnd('$', '-', ' ')
     }
 
+    /** A line that is a quantity expression the patterns could not read, e.g. "4.25 kg @ 1.74/k8". */
+    private fun looksLikeQuantity(text: String): Boolean =
+        text.contains('@') && text.any(Char::isDigit) ||
+            Regex("""^\s*\d+(?:[.,]\d+)?\s*(?:x|X|kg|g|lbs?|ml|l)\b""").containsMatchIn(text)
     /** (quantity in thousandths, unit, unit price) from "2 @ 1.49" or "1.25 kg @ 1.74/kg". */
     private fun quantityOf(text: String): Triple<Long, MeasureUnit, Money>? {
         WEIGHT_AT_PRICE.find(text)?.let { match ->
