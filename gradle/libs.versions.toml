@@ -39,6 +39,8 @@ camerax = "1.6.2"
 # Already brought in by CameraX; declared because receipt processing uses it directly.
 exifinterface = "1.4.2"
 tesseract4android = "4.9.0"
+# Argon2id for backup passwords only (Bouncy Castle Licence, MIT-style); R8 keeps just what is used.
+bouncycastle = "1.86"
 coroutines = "1.11.0"
 kotlinxSerialization = "1.8.1"
 junit = "4.13.2"
@@ -57,6 +59,7 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 androidx-camera-compose = { group = "androidx.camera", name = "camera-compose", version.ref = "camerax" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+bouncycastle-prov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 tesseract4android = { group = "cz.adaptech.tesseract4android", name = "tesseract4android", version.ref = "tesseract4android" }
 
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }

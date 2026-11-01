@@ -67,7 +67,7 @@ import com.pocketbudget.app.data.db.entity.TransferEntity
         RefundEntity::class,
         RefundAllocationEntity::class,
     ],
-    version = 7,
+    version = PocketBudgetDatabase.SCHEMA_VERSION,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -86,5 +86,8 @@ abstract class PocketBudgetDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "pocket_budget.db"
+
+        /** Current schema; backups from newer schemas are refused. */
+        const val SCHEMA_VERSION = 7
     }
 }

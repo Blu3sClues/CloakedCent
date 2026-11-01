@@ -80,5 +80,21 @@ class DatabaseKeyStore(
     companion object {
         const val PASSPHRASE_BYTES = 32
         private const val FORMAT_VERSION: Byte = 1
+
+        /**
+         * Writes [passphrase] wrapped by [wrapper] to [file] in this store's format, atomically.
+         * Used to stage a restored database's key; the live key file is only ever replaced by
+         * the restore journal.
+         */
+        fun writeWrapped(file: File, passphrase: ByteArray, wrapper: KeyWrapper) {
+            require(passphrase.size == PASSPHRASE_BYTES)
+            file.parentFile?.mkdirs()
+            val temp = File(file.parentFile, "${file.name}.tmp")
+            FileOutputStream(temp).use { out ->
+                out.write(byteArrayOf(FORMAT_VERSION) + wrapper.wrap(passphrase))
+                out.fd.sync()
+            }
+            Files.move(temp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        }
     }
 }

@@ -43,13 +43,24 @@ class SettingsViewModel(private val settings: SettingsRepository) : ViewModel() 
 }
 
 @Composable
-fun SettingsRoute(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)) {
+fun SettingsRoute(
+    onBack: () -> Unit,
+    onBackup: () -> Unit = {},
+    onRestore: () -> Unit = {},
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory),
+) {
     val mode by viewModel.themeMode.collectAsStateWithLifecycle()
-    SettingsScreen(mode, onBack, viewModel::setThemeMode)
+    SettingsScreen(mode, onBack, viewModel::setThemeMode, onBackup, onRestore)
 }
 
 @Composable
-fun SettingsScreen(themeMode: ThemeMode, onBack: () -> Unit, onThemeModeChange: (ThemeMode) -> Unit) {
+fun SettingsScreen(
+    themeMode: ThemeMode,
+    onBack: () -> Unit,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    onBackup: () -> Unit = {},
+    onRestore: () -> Unit = {},
+) {
     Scaffold(topBar = { BackTopBar(stringResource(R.string.settings_title), onBack) }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp)) {
             SectionHeader(stringResource(R.string.settings_theme))
@@ -71,6 +82,10 @@ fun SettingsScreen(themeMode: ThemeMode, onBack: () -> Unit, onThemeModeChange: 
                     }
                 }
             }
+            SectionHeader(stringResource(R.string.settings_backup))
+            Text(stringResource(R.string.settings_backup_body), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 8.dp))
+            androidx.compose.material3.OutlinedButton(onClick = onBackup, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.backup_title)) }
+            androidx.compose.material3.OutlinedButton(onClick = onRestore, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.restore_title)) }
         }
     }
 }

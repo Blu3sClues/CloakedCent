@@ -50,8 +50,8 @@ Run from the project root (`gradlew.bat` on Windows, `./gradlew` elsewhere).
 | Task | Command |
 |---|---|
 | Debug APK | `gradlew.bat assembleDebug` |
-| Unit tests (JVM) | `gradlew.bat testDebugUnitTest` |
-| Instrumented tests (emulator/device required) | `gradlew.bat connectedDebugAndroidTest` |
+| Unit tests (JVM) | `gradlew.bat testQaUnitTest` |
+| Instrumented tests (emulator/device required) | `gradlew.bat connectedQaAndroidTest` |
 | Lint | `gradlew.bat lintDebug` |
 | Install on running emulator/device | `gradlew.bat installDebug` |
 | Release build (R8-shrunk, unsigned) | `gradlew.bat assembleRelease` |
@@ -59,9 +59,13 @@ Run from the project root (`gradlew.bat` on Windows, `./gradlew` elsewhere).
 Outputs:
 
 - Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
-- Unit test report: `app/build/reports/tests/testDebugUnitTest/index.html`
-- Instrumented test report: `app/build/reports/androidTests/connected/debug/index.html`
+- Unit test report: `app/build/reports/tests/testQaUnitTest/index.html`
+- Instrumented test report: `app/build/reports/androidTests/connected/qa/index.html`
 - Lint report: `app/build/reports/lint-results-debug.html`
+
+Tests run against a separate **qa** build (`com.pocketbudget.app.qa`), which the
+instrumented test run installs and removes. Your own debug installation and its data are
+never replaced, cleared or uninstalled by tests.
 
 Release signing is not configured yet. Signing keys must never be committed
 (`*.jks`, `*.keystore` and `keystore.properties` are gitignored).
@@ -145,22 +149,83 @@ No key is hardcoded, and no key material is logged or included in exception mess
 
 ---
 
-## Backup design (planned; not yet implemented)
+## Backups and restore
 
-The Keystore key is bound to this device and installation by design, so it
-**cannot** protect portable backups. Manual backups will therefore:
+Settings → Backup creates a password-encrypted backup and saves it wherever you choose,
+using the Storage Access Framework. Settings → Restore backup reads one back. Nothing is
+uploaded, and no cloud service is involved.
 
-1. Be started only by the user, and written to a location the user picks with
-   the Storage Access Framework. No cloud integration.
-2. Be encrypted with a key derived from a **user-chosen backup password**
-   (a memory-hard KDF), independent of the device key.
-3. Use a versioned file format containing the database schema version, so a
-   restore can run the normal Room migrations.
-4. Be restored by validating the backup completely before replacing anything,
-   keeping the current database until the restore has succeeded.
+### Format (`.pbbackup`, version 1)
 
-The `app_metadata` table is reserved for backup and installation metadata.
+```
+"PBBK" | format version (1 byte) | header length (2 bytes, big-endian) | header (UTF-8 JSON)
+chunk*: ciphertext length (4 bytes) | AES-256-GCM ciphertext with its 16-byte tag
+```
 
+- **Header (readable, but authenticated).** It holds only the Argon2id parameters
+  (memory, iterations, parallelism, version 0x13), a random 16-byte salt, the chunk size
+  (1 MiB) and a random 8-byte nonce prefix.
+- **Key.** A 256-bit key is derived from the password with Argon2id. Defaults:
+  64 MiB memory, 3 iterations, parallelism 1. Implementation: BouncyCastle 1.86
+  (Bouncy Castle Licence, MIT-style).
+- **Chunks.** Chunk *i* uses nonce = prefix ‖ *i* (4 bytes). Its associated data is the
+  entire preamble (magic, version, header), *i*, and a final-chunk flag.
+  - **Header and order:** any change to the header, the chunk order or a chunk's contents
+    fails authentication.
+  - **Truncation:** a file cut short lacks its final chunk and is rejected.
+  - **Trailing data:** data after the final chunk is rejected.
+- **Decrypted payload.** An archive of entries (`type | name | size | bytes`, ending
+  with type 0):
+
+  | Entry | Contents |
+  |---|---|
+  | `metadata.json` | Format version, database schema version, app version, creation time |
+  | `database.key` | The 32-byte SQLCipher key. It exists only inside the encrypted backup and in memory. |
+  | `database/pocket_budget.db` | A consistent SQLCipher-encrypted copy, made with `sqlcipher_export` on a separate connection |
+  | `receipts/<uuid>.pbr` | Every receipt page image the database refers to (photos and imported PDF pages), copied as their already-encrypted files |
+  | `manifest.json` | Size and SHA-256 of every other entry |
+
+- **What is not in the backup.** The theme setting lives in SharedPreferences and is not
+  included. Imported PDFs are kept as their encrypted page images plus the text read from
+  them; the original PDF file is not stored.
+
+### Restore safety
+
+1. **Validation.** The backup is decrypted into a private staging area and validated
+   completely before anything live is touched:
+   - **Structure:** every chunk authenticates; only exact entry names are accepted (so no
+     path traversal); entry sizes are capped; free space is checked.
+   - **Manifest:** the entries must match the manifest exactly.
+   - **Database:** it is opened through Room with its own key, which runs migrations from
+     older schemas. SQLCipher and SQLite integrity checks and the foreign-key check must
+     pass.
+   - **Images:** every receipt image must decrypt and match its recorded hash.
+2. **Key.** The restored database key is wrapped with this installation's Android
+   Keystore key. The backup's key is never stored unwrapped.
+3. **Confirmation.** Only after the user confirms is a restore journal written. The app
+   then restarts and applies the restore at startup, before the database is opened.
+   - **The swap:** each live item (database, its WAL/SHM/journal files, the key file and
+     the receipt images) is moved aside, and the staged item is moved into place.
+   - **Crash safety:** every step can be repeated, so a crash at any point finishes the
+     restore on the next start.
+   - **Missing staging:** if staging is missing, live data is left untouched.
+4. **Failure.** A wrong password, a damaged or incomplete file, an unsupported or newer
+   format, a missing attachment, too little storage or a cancellation leaves current data
+   exactly as it was, and the staging area is removed.
+
+### Security assumptions
+
+- **The password is the only protection.** Backups are as strong as the password;
+  Argon2id makes guessing expensive but cannot save a weak password. Passwords are never
+  stored. A lost password means a lost backup.
+- **Memory handling.** Password and key byte arrays are wiped after use. Text typed into
+  the password field passes through immutable strings in the UI toolkit, which cannot be
+  wiped.
+- **Visible metadata.** The header reveals only that the file is a Pocket Budget backup
+  and its KDF parameters. Its size reveals the approximate amount of data.
+- **Restore-time limits.** Argon2 settings are bounded (≤ 256 MiB, ≤ 10 iterations,
+  ≤ 4 lanes), as are entry sizes and entry counts, so a crafted file cannot exhaust the
+  device.
 ---
 
 ## Financial data rules

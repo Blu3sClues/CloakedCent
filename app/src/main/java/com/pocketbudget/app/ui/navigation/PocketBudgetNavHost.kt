@@ -13,6 +13,7 @@ import com.pocketbudget.app.ui.feature.account.AdjustBalanceRoute
 import com.pocketbudget.app.ui.feature.dashboard.DashboardRoute
 import com.pocketbudget.app.ui.feature.history.HistoryRoute
 import com.pocketbudget.app.ui.feature.history.HistoryViewModel
+import com.pocketbudget.app.ui.feature.backup.BackupRoute
 import com.pocketbudget.app.ui.feature.settings.SettingsRoute
 import com.pocketbudget.app.ui.feature.budget.ARG_BUDGET_ID
 import com.pocketbudget.app.ui.feature.budget.BudgetDetailRoute
@@ -48,6 +49,8 @@ import com.pocketbudget.app.ui.feature.transaction.TransactionEditorViewModel
 private object Routes {
     const val DASHBOARD = "dashboard"
     const val SETTINGS = "settings"
+    const val BACKUP = "backup"
+    const val RESTORE = "restore"
     const val BUDGETS = "budgets"
     const val BUDGET = "budget/{$ARG_BUDGET_ID}"
     const val BUDGET_EDIT = "budget-edit?$ARG_BUDGET_ID={$ARG_BUDGET_ID}"
@@ -181,7 +184,11 @@ fun PocketBudgetNavHost() {
                 onEditAccount = { nav.navigate(Routes.account(it)) },
             )
         }
-        composable(Routes.SETTINGS) { SettingsRoute(onBack = back) }
+        composable(Routes.SETTINGS) {
+            SettingsRoute(onBack = back, onBackup = { nav.navigate(Routes.BACKUP) }, onRestore = { nav.navigate(Routes.RESTORE) })
+        }
+        composable(Routes.BACKUP) { BackupRoute(restore = false, onBack = back) }
+        composable(Routes.RESTORE) { BackupRoute(restore = true, onBack = back) }
         composable(Routes.BUDGETS) {
             BudgetsRoute(onBack = back, onOpen = { nav.navigate(Routes.budget(it)) }, onAdd = { nav.navigate(Routes.budgetEdit(null)) })
         }

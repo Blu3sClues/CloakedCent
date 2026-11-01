@@ -35,7 +35,17 @@ android {
         noCompress += "traineddata"
     }
 
+    // Instrumented tests run against a separate "qa" install (com.pocketbudget.app.qa), so
+    // test runs never replace, clear or uninstall the developer's own debug installation.
+    testBuildType = "qa"
+
     buildTypes {
+        create("qa") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".qa"
+            versionNameSuffix = "-qa"
+            matchingFallbacks += "debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -77,6 +87,9 @@ val verifyTesseractArtifact = tasks.register("verifyTesseractArtifact") {
 }
 tasks.named("preBuild") { dependsOn(verifyTesseractArtifact) }
 
+// The qa build reuses the debug-only sources (sample data) unchanged.
+android.sourceSets.getByName("qa").kotlin.directories += "src/debug/java"
+
 room {
     // Exported schemas are committed to Git; migration tests read them back.
     schemaDirectory("$projectDir/schemas")
@@ -94,6 +107,7 @@ dependencies {
     implementation(libs.androidx.camera.compose)
     implementation(libs.androidx.exifinterface)
     implementation(libs.tesseract4android)
+    implementation(libs.bouncycastle.prov)
     implementation(libs.kotlinx.coroutines.android)
 
     implementation(platform(libs.androidx.compose.bom))
@@ -127,4 +141,6 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    "qaImplementation"(libs.androidx.compose.ui.tooling)
+    "qaImplementation"(libs.androidx.compose.ui.test.manifest)
 }

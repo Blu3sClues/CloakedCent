@@ -492,4 +492,47 @@
     <string name="error_refund_amount">Enter a refund amount greater than zero.</string>
     <string name="error_refund_exceeds">That is more than the %1$s that can still be refunded.</string>
     <string name="error_refund_quantity">Enter a quantity greater than zero and no more than is left.</string>
+    <!-- Backup and restore -->
+    <string name="settings_backup">Backup</string>
+    <string name="settings_backup_body">Save an encrypted copy of all your data to a file you choose, or restore one. Nothing is uploaded.</string>
+    <string name="backup_title">Create backup</string>
+    <string name="restore_title">Restore backup</string>
+    <string name="backup_intro">The backup contains your accounts, transactions, budgets, recurring items, receipts with their images, products and prices. It is encrypted with the password you choose and saved where you pick.</string>
+    <string name="restore_intro">Choose a Pocket Budget backup file and enter its password. It is checked completely before anything on this device is changed.</string>
+    <string name="backup_password_warning">If you lose the backup password, the backup cannot be opened by anyone, including you. It is not stored anywhere.</string>
+    <string name="backup_password">Backup password</string>
+    <string name="backup_password_confirm">Repeat password</string>
+    <string name="backup_password_mismatch">The passwords do not match.</string>
+    <string name="backup_create">Choose location and back up</string>
+    <string name="backup_working">Encrypting and saving the backup…</string>
+    <string name="backup_done">Backup saved. Keep the file and its password somewhere safe.</string>
+    <string name="backup_cancelled">Backup cancelled. The incomplete file was removed.</string>
+    <string name="backup_error_password_short">The password is too short.</string>
+    <string name="backup_error_attachment">A receipt image is missing or damaged, so the backup was not made complete.</string>
+    <string name="backup_error_storage">There is not enough free storage on this device.</string>
+    <string name="backup_error_generic">The operation failed. Nothing on this device was changed.</string>
+    <string name="restore_choose">Choose backup file</string>
+    <string name="restore_choose_other">Choose a different file</string>
+    <string name="restore_selected">Selected: %1$s</string>
+    <string name="restore_check">Check backup</string>
+    <string name="restore_checking">Decrypting and checking the backup…</string>
+    <string name="restore_cancelled">Restore cancelled. Nothing on this device was changed.</string>
+    <string name="restore_valid">Backup checked: complete and intact</string>
+    <string name="restore_created">Created %1$s</string>
+    <string name="restore_contents">Accounts: %1$d · Entries: %2$d · Receipts: %3$d · Images: %4$d</string>
+    <string name="restore_app_version">Made with app version %1$s</string>
+    <string name="restore_replace_warning">Restoring replaces all data currently in Pocket Budget on this device.</string>
+    <string name="restore_replace">Replace my data</string>
+    <string name="restore_confirm_title">Replace all current data?</string>
+    <string name="restore_confirm_body">Everything now in Pocket Budget on this device will be replaced by the backup. This cannot be undone.</string>
+    <string name="restore_restarting">The backup is ready. Pocket Budget will restart to finish restoring.</string>
+    <string name="restore_restart">Restart now</string>
+    <string name="restore_error_password">The password is wrong or the file is damaged. Nothing on this device was changed.</string>
+    <string name="restore_error_incomplete">The backup file is incomplete. Nothing on this device was changed.</string>
+    <string name="restore_error_newer">This backup was made by a newer version of Pocket Budget. Update the app first.</string>
+    <string name="restore_error_damaged">This is not a valid Pocket Budget backup, or it is damaged. Nothing on this device was changed.</string>
+    <plurals name="backup_password_rules">
+        <item quantity="one">At least %1$d character. A longer passphrase is stronger.</item>
+        <item quantity="other">At least %1$d characters. A longer passphrase is stronger.</item>
+    </plurals>
 </resources>
