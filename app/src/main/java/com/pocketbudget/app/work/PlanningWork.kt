@@ -55,6 +55,8 @@ class PlanningWorker(context: Context, params: WorkerParameters) : CoroutineWork
                     notifier.showBudgetAlert(progress, threshold)
                 }
             }
+            // Image files left by an interrupted import or discard.
+            container.receiptRepository.removeOrphanImages()
             Result.success()
         } catch (e: CancellationException) {
             throw e

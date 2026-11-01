@@ -14,6 +14,7 @@ import org.junit.Assert.assertThrows
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -273,6 +274,53 @@ class MigrationTest {
         val db = PocketBudgetDatabaseFactory.create(context, passphrase, name = TEST_DB)
         helper.closeWhenFinished(db)
         assertEquals(Money(7_500), RoomAccountRepository({ db }).observeBalances().first().single().current)
+    }
+
+    @Test
+    fun migrate5To6AddsReceiptTablesAndKeepsLedgerAndBudgets() = runTest {
+        helper.createDatabase(TEST_DB, 5).apply {
+            execSQL(
+                """
+                INSERT INTO accounts (id, name, type, opening_balance_cents, include_in_totals, is_archived, created_at, updated_at)
+                VALUES (1, 'Checking', 'CHECKING', 10000, 1, 0, 0, 0)
+                """,
+            )
+            execSQL("INSERT INTO categories (id, name, kind, parent_id, is_archived, created_at) VALUES (7, 'Food', 'EXPENSE', NULL, 0, 0)")
+            execSQL(
+                """
+                INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on,
+                    category_id, revision, is_deleted, is_adjustment, created_at, updated_at)
+                VALUES (1, 'r1', 1, 'EXPENSE', -2500, 'SPENT', 20400, 7, 1, 0, 0, 0, 0)
+                """,
+            )
+            execSQL(
+                """
+                INSERT INTO budgets (id, name, category_id, period_type, start_date, end_date, cycle_start, rollover,
+                    alert_thresholds, state, created_at, updated_at)
+                VALUES (1, 'Food', 7, 'MONTHLY', 20393, NULL, 20393, 0, '80,100', 'ACTIVE', 0, 0)
+                """,
+            )
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 6, true, Migrations.MIGRATION_5_6).apply {
+            listOf("receipts", "receipt_items", "products", "price_observations", "transaction_splits").forEach { table ->
+                query("SELECT COUNT(*) FROM $table").use { it.moveToFirst(); assertEquals(0, it.getInt(0)) }
+            }
+            close()
+        }
+        val db = PocketBudgetDatabaseFactory.create(context, passphrase, name = TEST_DB)
+        helper.closeWhenFinished(db)
+        assertEquals(Money(7_500), RoomAccountRepository({ db }).observeBalances().first().single().current)
+        // An ordinary expense without splits still counts once, in its own category.
+        val spending = db.budgetDao().getExpenses(java.time.LocalDate.ofEpochDay(0))
+        assertEquals(listOf(7L to 2500L), spending.map { it.categoryId to it.spentCents })
+        // v6 triggers are installed on open: a split larger than its expense is refused.
+        val failed = runCatching {
+            db.openHelper.writableDatabase.execSQL(
+                "INSERT INTO transaction_splits (transaction_id, category_id, amount_cents, created_at) VALUES (1, 7, 2501, 0)",
+            )
+        }
+        assertTrue(failed.isFailure)
     }
 
     @Test

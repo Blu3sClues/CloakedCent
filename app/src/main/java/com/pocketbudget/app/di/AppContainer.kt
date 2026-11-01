@@ -14,6 +14,13 @@ import com.pocketbudget.app.dev.SampleData
 import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.domain.repository.CategoryRepository
 import com.pocketbudget.app.domain.repository.PayeeRepository
+import com.pocketbudget.app.data.receipt.MediaKeyProvider
+import com.pocketbudget.app.data.receipt.ReceiptImageStore
+import com.pocketbudget.app.data.receipt.TesseractOcrEngine
+import com.pocketbudget.app.data.repository.RoomProductRepository
+import com.pocketbudget.app.data.repository.RoomReceiptRepository
+import com.pocketbudget.app.domain.repository.ProductRepository
+import com.pocketbudget.app.domain.repository.ReceiptRepository
 import com.pocketbudget.app.data.repository.RoomBudgetRepository
 import com.pocketbudget.app.data.repository.RoomRecurringRepository
 import com.pocketbudget.app.data.settings.SharedPreferencesSettingsRepository
@@ -61,10 +68,27 @@ class AppContainer(context: Context) {
     val budgetRepository: BudgetRepository by lazy { RoomBudgetRepository({ database }) }
     val recurringRepository: RecurringRepository by lazy { RoomRecurringRepository({ database }, transactionRepository) }
 
+    private val mediaKeys by lazy { MediaKeyProvider { database } }
+
+    // noBackupFilesDir: receipt images never leave the device through platform backup.
+    private val receiptImages by lazy { ReceiptImageStore(File(appContext.noBackupFilesDir, RECEIPT_DIR), mediaKeys::get) }
+
+    val receiptRepository: ReceiptRepository by lazy {
+        RoomReceiptRepository(
+            database = { database },
+            transactions = transactionRepository,
+            payees = payeeRepository,
+            images = receiptImages,
+            ocr = TesseractOcrEngine(appContext),
+        )
+    }
+    val productRepository: ProductRepository by lazy { RoomProductRepository({ database }) }
+
     /** Debug builds only (see src/debug); null in release. */
     val sampleSeeder: (suspend () -> Unit)? = SampleData.seeder(this)
 
     private companion object {
         const val DATABASE_KEY_FILE = "database.key"
+        const val RECEIPT_DIR = "receipts"
     }
 }

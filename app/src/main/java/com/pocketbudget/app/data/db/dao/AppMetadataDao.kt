@@ -1,6 +1,8 @@
 package com.pocketbudget.app.data.db.dao
 
 import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
 import com.pocketbudget.app.data.db.entity.AppMetadataEntity
@@ -13,4 +15,8 @@ interface AppMetadataDao {
 
     @Upsert
     suspend fun upsert(entry: AppMetadataEntity)
+
+    /** Never replaces an existing value (used for keys that must not change once written). */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(entry: AppMetadataEntity)
 }

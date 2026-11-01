@@ -294,6 +294,10 @@ class RoomTransactionRepository(
             )
         } else {
             requireCategory(db, edit.categoryId, current.type)
+            if (signed(current.type, edit.amount).cents != current.amountCents && db.receiptDao().hasSplits(id)) {
+                // Its receipt divides this amount across categories; changing it would unbalance them.
+                throw LedgerException.InvalidOperation("This expense is split by its receipt, so its amount cannot change")
+            }
             applyChange(
                 db,
                 current,

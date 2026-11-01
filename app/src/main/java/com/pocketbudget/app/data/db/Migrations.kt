@@ -111,5 +111,50 @@ object Migrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+    /**
+     * v6: receipts, purchased items, products, store-specific aliases, price history and
+     * expense category splits. Additive only; triggers for the new tables are created
+     * on open. Existing expenses have no splits, so budgets are unchanged.
+     */
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            listOf(
+                "CREATE TABLE IF NOT EXISTS `stores` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `normalized_name` TEXT NOT NULL, `address` TEXT, `latitude_e7` INTEGER, `longitude_e7` INTEGER, `payee_id` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`payee_id`) REFERENCES `payees`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE INDEX IF NOT EXISTS `index_stores_normalized_name` ON `stores` (`normalized_name`)",
+                "CREATE INDEX IF NOT EXISTS `index_stores_payee_id` ON `stores` (`payee_id`)",
+                "CREATE TABLE IF NOT EXISTS `receipts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `request_id` TEXT NOT NULL, `status` TEXT NOT NULL, `store_id` INTEGER, `store_name` TEXT NOT NULL, `store_address` TEXT NOT NULL, `purchased_on` INTEGER, `purchased_minute` INTEGER, `subtotal_cents` INTEGER, `tax_cents` INTEGER NOT NULL, `discount_cents` INTEGER NOT NULL, `total_cents` INTEGER, `receipt_number` TEXT NOT NULL, `default_category_id` INTEGER, `transaction_id` INTEGER, `latitude_e7` INTEGER, `longitude_e7` INTEGER, `uncertain_fields` TEXT NOT NULL, `field_sources` TEXT NOT NULL, `ocr_engine` TEXT, `ocr_error` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `confirmed_at` INTEGER, FOREIGN KEY(`store_id`) REFERENCES `stores`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`transaction_id`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`default_category_id`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_receipts_request_id` ON `receipts` (`request_id`)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_receipts_transaction_id` ON `receipts` (`transaction_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_receipts_store_id` ON `receipts` (`store_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_receipts_default_category_id` ON `receipts` (`default_category_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_receipts_purchased_on` ON `receipts` (`purchased_on`)",
+                "CREATE TABLE IF NOT EXISTS `receipt_images` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `receipt_id` INTEGER NOT NULL, `page` INTEGER NOT NULL, `file_name` TEXT NOT NULL, `source_sha256` TEXT NOT NULL, `content_sha256` TEXT NOT NULL, `perceptual_hash` INTEGER NOT NULL, `width` INTEGER NOT NULL, `height` INTEGER NOT NULL, `byte_size` INTEGER NOT NULL, `format_version` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, FOREIGN KEY(`receipt_id`) REFERENCES `receipts`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_receipt_images_receipt_id_page` ON `receipt_images` (`receipt_id`, `page`)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_receipt_images_file_name` ON `receipt_images` (`file_name`)",
+                "CREATE INDEX IF NOT EXISTS `index_receipt_images_source_sha256` ON `receipt_images` (`source_sha256`)",
+                "CREATE TABLE IF NOT EXISTS `receipt_ocr_lines` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `receipt_id` INTEGER NOT NULL, `page` INTEGER NOT NULL, `line_index` INTEGER NOT NULL, `text` TEXT NOT NULL, `confidence` INTEGER NOT NULL, `box_left` INTEGER, `box_top` INTEGER, `box_right` INTEGER, `box_bottom` INTEGER, FOREIGN KEY(`receipt_id`) REFERENCES `receipts`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_receipt_ocr_lines_receipt_id_page_line_index` ON `receipt_ocr_lines` (`receipt_id`, `page`, `line_index`)",
+                "CREATE TABLE IF NOT EXISTS `products` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `normalized_name` TEXT NOT NULL, `brand` TEXT, `default_category_id` INTEGER, `pack_quantity_milli` INTEGER, `pack_unit` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`default_category_id`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_products_normalized_name` ON `products` (`normalized_name`)",
+                "CREATE INDEX IF NOT EXISTS `index_products_default_category_id` ON `products` (`default_category_id`)",
+                "CREATE TABLE IF NOT EXISTS `receipt_items` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `receipt_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, `raw_text` TEXT NOT NULL, `description` TEXT NOT NULL, `product_id` INTEGER, `quantity_milli` INTEGER NOT NULL, `unit` TEXT NOT NULL, `unit_price_cents` INTEGER, `line_total_cents` INTEGER NOT NULL, `discount_cents` INTEGER NOT NULL, `category_id` INTEGER, `confidence` INTEGER NOT NULL, `uncertain` INTEGER NOT NULL, `source_page` INTEGER, `source_line` INTEGER, `user_verified` INTEGER NOT NULL, FOREIGN KEY(`receipt_id`) REFERENCES `receipts`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`product_id`) REFERENCES `products`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`category_id`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_receipt_items_receipt_id_position` ON `receipt_items` (`receipt_id`, `position`)",
+                "CREATE INDEX IF NOT EXISTS `index_receipt_items_product_id` ON `receipt_items` (`product_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_receipt_items_category_id` ON `receipt_items` (`category_id`)",
+                "CREATE TABLE IF NOT EXISTS `product_aliases` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `store_id` INTEGER NOT NULL, `normalized_alias` TEXT NOT NULL, `product_id` INTEGER NOT NULL, `times_confirmed` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`store_id`) REFERENCES `stores`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`product_id`) REFERENCES `products`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_product_aliases_store_id_normalized_alias` ON `product_aliases` (`store_id`, `normalized_alias`)",
+                "CREATE INDEX IF NOT EXISTS `index_product_aliases_product_id` ON `product_aliases` (`product_id`)",
+                "CREATE TABLE IF NOT EXISTS `price_observations` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `product_id` INTEGER NOT NULL, `store_id` INTEGER NOT NULL, `receipt_item_id` INTEGER NOT NULL, `observed_on` INTEGER NOT NULL, `quantity_milli` INTEGER NOT NULL, `unit` TEXT NOT NULL, `paid_cents` INTEGER NOT NULL, `unit_price_cents` INTEGER, `normalized_dimension` TEXT, `normalized_millicents` INTEGER, `created_at` INTEGER NOT NULL, FOREIGN KEY(`product_id`) REFERENCES `products`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`store_id`) REFERENCES `stores`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`receipt_item_id`) REFERENCES `receipt_items`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_price_observations_receipt_item_id` ON `price_observations` (`receipt_item_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_price_observations_product_id_observed_on` ON `price_observations` (`product_id`, `observed_on`)",
+                "CREATE INDEX IF NOT EXISTS `index_price_observations_store_id` ON `price_observations` (`store_id`)",
+                "CREATE TABLE IF NOT EXISTS `transaction_splits` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `transaction_id` INTEGER NOT NULL, `category_id` INTEGER NOT NULL, `amount_cents` INTEGER NOT NULL, `receipt_id` INTEGER, `created_at` INTEGER NOT NULL, FOREIGN KEY(`transaction_id`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`category_id`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`receipt_id`) REFERENCES `receipts`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_transaction_splits_transaction_id_category_id` ON `transaction_splits` (`transaction_id`, `category_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_transaction_splits_category_id` ON `transaction_splits` (`category_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_transaction_splits_receipt_id` ON `transaction_splits` (`receipt_id`)",
+            ).forEach(db::execSQL)
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 }

@@ -65,8 +65,101 @@ object LedgerSchema {
         """,
     )
 
+    /**
+     * v6 rules. Splits belong to a live expense, use expense categories and never add
+     * up to more than the expense; once written, they and the expense amount are fixed.
+     * A confirmed receipt is final and always points at an expense. Price history is
+     * append-only.
+     */
+    private val RECEIPT_TRIGGERS = listOf(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_splits_validate_insert
+        BEFORE INSERT ON transaction_splits
+        WHEN NEW.amount_cents <= 0
+            OR NOT EXISTS (SELECT 1 FROM transactions t WHERE t.id = NEW.transaction_id
+                AND t.type = 'EXPENSE' AND t.is_deleted = 0)
+            OR NOT EXISTS (SELECT 1 FROM categories c WHERE c.id = NEW.category_id AND c.kind = 'EXPENSE')
+            OR (SELECT COALESCE(SUM(amount_cents), 0) FROM transaction_splits
+                WHERE transaction_id = NEW.transaction_id) + NEW.amount_cents
+                > (SELECT -amount_cents FROM transactions WHERE id = NEW.transaction_id)
+        BEGIN SELECT RAISE(ABORT, 'split violates ledger rules'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_splits_immutable_update
+        BEFORE UPDATE ON transaction_splits
+        BEGIN SELECT RAISE(ABORT, 'splits are immutable'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_splits_immutable_delete
+        BEFORE DELETE ON transaction_splits
+        BEGIN SELECT RAISE(ABORT, 'splits are immutable'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_transactions_split_amount_fixed
+        BEFORE UPDATE OF amount_cents ON transactions
+        WHEN NEW.amount_cents <> OLD.amount_cents
+            AND EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = NEW.id)
+        BEGIN SELECT RAISE(ABORT, 'split expense amount is fixed'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_receipts_confirmed_insert
+        BEFORE INSERT ON receipts
+        WHEN NEW.status = 'CONFIRMED' AND NEW.transaction_id IS NULL
+        BEGIN SELECT RAISE(ABORT, 'confirmed receipts need an expense'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_receipts_final
+        BEFORE UPDATE ON receipts
+        WHEN OLD.status IN ('CONFIRMED', 'DISCARDED')
+            OR (NEW.status = 'CONFIRMED' AND (NEW.transaction_id IS NULL OR NEW.total_cents IS NULL))
+            OR (NEW.status <> 'CONFIRMED' AND NEW.transaction_id IS NOT NULL)
+        BEGIN SELECT RAISE(ABORT, 'receipt is final or inconsistent'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_receipts_no_delete
+        BEFORE DELETE ON receipts
+        BEGIN SELECT RAISE(ABORT, 'receipts are discarded, not deleted'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_receipt_items_validate_insert
+        BEFORE INSERT ON receipt_items
+        WHEN NEW.line_total_cents < 0 OR NEW.discount_cents < 0 OR NEW.discount_cents > NEW.line_total_cents
+            OR NEW.quantity_milli <= 0
+        BEGIN SELECT RAISE(ABORT, 'receipt item violates rules'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_receipt_items_validate_update
+        BEFORE UPDATE ON receipt_items
+        WHEN NEW.line_total_cents < 0 OR NEW.discount_cents < 0 OR NEW.discount_cents > NEW.line_total_cents
+            OR NEW.quantity_milli <= 0
+            OR (SELECT status FROM receipts WHERE id = OLD.receipt_id) IN ('CONFIRMED', 'DISCARDED')
+        BEGIN SELECT RAISE(ABORT, 'receipt item violates rules'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_receipt_items_confirmed_delete
+        BEFORE DELETE ON receipt_items
+        WHEN (SELECT status FROM receipts WHERE id = OLD.receipt_id) = 'CONFIRMED'
+        BEGIN SELECT RAISE(ABORT, 'confirmed receipt items are kept'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_prices_immutable_update
+        BEFORE UPDATE ON price_observations
+        BEGIN SELECT RAISE(ABORT, 'price history is immutable'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_prices_immutable_delete
+        BEFORE DELETE ON price_observations
+        BEGIN SELECT RAISE(ABORT, 'price history is immutable'); END
+        """,
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_aliases_no_delete
+        BEFORE DELETE ON product_aliases
+        BEGIN SELECT RAISE(ABORT, 'learned aliases are kept'); END
+        """,
+    )
+
     fun createTriggers(db: SupportSQLiteDatabase) {
-        TRIGGERS.forEach(db::execSQL)
+        (TRIGGERS + RECEIPT_TRIGGERS).forEach(db::execSQL)
     }
 
     /** Starter categories; parents listed before children. */

@@ -16,7 +16,28 @@ import com.pocketbudget.app.domain.model.TransactionType
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
-/** A completed expense, for budget calculations. */
+/**
+ * Completed spending by category, for budgets. Scheduled and deleted entries never
+ * count. A split expense counts once, through its splits; any part not covered by
+ * splits stays with the expense's own category, so the total is always exactly the
+ * expense amount.
+ */
+const val EXPENSES_SQL = """
+    SELECT t.occurred_on, s.category_id, s.amount_cents AS spent_cents
+    FROM transaction_splits s JOIN transactions t ON t.id = s.transaction_id
+    WHERE t.type = 'EXPENSE' AND t.status <> 'SCHEDULED' AND t.is_deleted = 0 AND t.occurred_on >= :from
+    UNION ALL
+    SELECT occurred_on, category_id, spent_cents FROM (
+        SELECT t.occurred_on, t.category_id,
+            -t.amount_cents - (SELECT COALESCE(SUM(amount_cents), 0) FROM transaction_splits
+                WHERE transaction_id = t.id) AS spent_cents
+        FROM transactions t
+        WHERE t.type = 'EXPENSE' AND t.status <> 'SCHEDULED' AND t.is_deleted = 0
+            AND t.category_id IS NOT NULL AND t.occurred_on >= :from
+    ) WHERE spent_cents > 0
+"""
+
+/** Completed spending in one category, for budget calculations. */
 data class ExpenseRow(
     @ColumnInfo(name = "occurred_on") val occurredOn: LocalDate,
     @ColumnInfo(name = "category_id") val categoryId: Long,
@@ -69,21 +90,17 @@ interface BudgetDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAlert(alert: BudgetAlertEntity): Long
 
-    /** Completed, categorised expenses on or after [from]; scheduled and deleted entries never count. */
+    /** Completed, categorised spending on or after [from]; see [EXPENSES_SQL]. */
     @Query(
         """
-        SELECT occurred_on, category_id, -amount_cents AS spent_cents FROM transactions
-        WHERE type = 'EXPENSE' AND status <> 'SCHEDULED' AND is_deleted = 0
-            AND category_id IS NOT NULL AND occurred_on >= :from
+        $EXPENSES_SQL
         """,
     )
     fun observeExpenses(from: LocalDate): Flow<List<ExpenseRow>>
 
     @Query(
         """
-        SELECT occurred_on, category_id, -amount_cents AS spent_cents FROM transactions
-        WHERE type = 'EXPENSE' AND status <> 'SCHEDULED' AND is_deleted = 0
-            AND category_id IS NOT NULL AND occurred_on >= :from
+        $EXPENSES_SQL
         """,
     )
     suspend fun getExpenses(from: LocalDate): List<ExpenseRow>

@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -21,6 +23,16 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            // Tesseract ships native code: phones (arm64) and the x86_64 emulator only.
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+    }
+
+    androidResources {
+        // The OCR model is copied out of the APK and checksummed; keep it uncompressed.
+        noCompress += "traineddata"
     }
 
     buildTypes {
@@ -44,6 +56,27 @@ android {
     }
 }
 
+// JitPack builds artifacts on demand, so the downloaded Tesseract AAR is checked
+// against the SHA-256 recorded when version 4.9.0 was reviewed.
+val verifyTesseractArtifact = tasks.register("verifyTesseractArtifact") {
+    val expected = "bce5d6413a1a5ae3d7240033fbbc851ba3217d0a08d9769400e17a077f42cb2a"
+    val aars = configurations.named("releaseRuntimeClasspath").map { classpath ->
+        classpath.incoming.artifactView {
+            attributes { attribute(Attribute.of("artifactType", String::class.java), "aar") }
+            componentFilter { it is ModuleComponentIdentifier && it.module == "tesseract4android" }
+        }.files
+    }
+    inputs.files(aars)
+    doLast {
+        val files = aars.get().files
+        check(files.size == 1) { "Expected one Tesseract AAR, found $files" }
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(files.single().readBytes()).joinToString("") { "%02x".format(it) }
+        check(actual == expected) { "Tesseract AAR checksum mismatch: $actual" }
+    }
+}
+tasks.named("preBuild") { dependsOn(verifyTesseractArtifact) }
+
 room {
     // Exported schemas are committed to Git; migration tests read them back.
     schemaDirectory("$projectDir/schemas")
@@ -56,6 +89,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.compose)
+    implementation(libs.tesseract4android)
     implementation(libs.kotlinx.coroutines.android)
 
     implementation(platform(libs.androidx.compose.bom))
