@@ -226,6 +226,18 @@ so every balance comes from a single source and nothing can be double counted.
 
 ### Receipts and purchase history (schema v6)
 
+- **PDF receipts.** *Import PDF* opens the system document picker (read-only access
+  to the chosen file; no storage permission).
+  - **Rendering:** pages are rendered offline by the platform `PdfRenderer` at about
+    200 DPI.
+  - **Long receipts:** a long single-page till roll is cut into images at blank gaps
+    between printed lines, at most 12 images per PDF.
+  - **Text:** on Android 15+, a digital PDF's own text is used exactly instead of
+    OCR, and stored as the receipt's reading (engine `pdf-text`). Scanned or
+    image-only PDFs, unusable text, older Android versions, and pages the user
+    rotates or crops are read by OCR.
+  - **Errors:** password-protected or unreadable PDFs are refused with a message.
+  - **Storage:** like photos, only the encrypted page images are kept.
 - **Workflow.** Capture pages with CameraX or the photo picker (multi-page; crop,
   rotate and enhance per page). The pages are stored encrypted, and OCR then fills
   in a *draft*. The user reviews and corrects it, then confirms or discards it.

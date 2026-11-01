@@ -284,7 +284,12 @@
     <string name="capture_take_photo">Take photo</string>
     <string name="capture_choose_photos">Choose photos</string>
     <string name="capture_pages">Pages: %1$d</string>
-    <string name="capture_hint">Add one photo per section for long receipts. Tap a page to crop, rotate or enhance it.</string>
+    <string name="capture_hint">Add one photo per section for long receipts, or import a PDF receipt. Tap a page to crop, rotate or enhance it.</string>
+    <string name="capture_import_pdf">Import PDF</string>
+    <string name="capture_pdf_error">This PDF could not be opened.</string>
+    <string name="capture_pdf_protected">Password-protected PDFs cannot be imported. Save an unprotected copy and try again.</string>
+    <string name="capture_pdf_empty">This PDF has no pages.</string>
+    <string name="capture_pdf_truncated">This PDF is long, so only its first 12 page images were added.</string>
     <string name="capture_scan">Read receipt</string>
     <string name="capture_camera_denied">Camera access is off. You can still choose photos, or allow the camera in system settings.</string>
     <string name="capture_camera_unavailable">The camera could not be started.</string>

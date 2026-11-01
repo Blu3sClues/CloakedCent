@@ -148,6 +148,9 @@ interface ReceiptDao {
     @Query("SELECT * FROM receipt_ocr_lines WHERE receipt_id = :receiptId ORDER BY page, line_index")
     fun observeOcrLines(receiptId: Long): Flow<List<ReceiptOcrLineEntity>>
 
+    @Query("SELECT * FROM receipt_ocr_lines WHERE receipt_id = :receiptId ORDER BY page, line_index")
+    suspend fun getOcrLines(receiptId: Long): List<ReceiptOcrLineEntity>
+
     @Query("DELETE FROM receipt_ocr_lines WHERE receipt_id = :receiptId")
     suspend fun deleteOcrLines(receiptId: Long)
 

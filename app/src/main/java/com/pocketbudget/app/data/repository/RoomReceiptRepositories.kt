@@ -87,14 +87,27 @@ class RoomReceiptRepository(
         val exact = processed.firstNotNullOfOrNull { page -> known.firstOrNull { it.sourceSha256 == page.sourceSha256 } }
         if (exact != null && !allowDuplicate) return ImportOutcome.Duplicate(exact.receiptId)
 
+        // Embedded PDF text is used only when every page has it; otherwise all pages are read by OCR.
+        val embedded = pages.takeIf { list -> list.all { it.embeddedText != null } }
+            ?.flatMapIndexed { page, input -> input.embeddedText!!.map { it.copy(page = page) } }
+            ?.mapIndexed { index, line -> line.copy(index = index) }
+
         // Files first, then rows: a crash in between leaves only orphan files, which are cleaned up later.
         val stored = withContext(ioDispatcher) { processed.map { images.write(it.jpeg) } }
         val id = try {
             write { db ->
                 val now = clock.millis()
                 val receiptId = db.receiptDao().insert(
-                    ReceiptEntity(requestId = requestId, status = ReceiptStatus.DRAFT, createdAt = now, updatedAt = now),
+                    ReceiptEntity(
+                        requestId = requestId,
+                        status = ReceiptStatus.DRAFT,
+                        ocrEngine = if (embedded != null) PDF_TEXT_ENGINE else null,
+                        createdAt = now,
+                        updatedAt = now,
+                    ),
                 )
+                // A digital PDF's own text is stored as its reading; runOcr then parses it exactly.
+                embedded?.let { db.receiptDao().insertOcrLines(it.map { line -> line.toEntity(receiptId) }) }
                 processed.forEachIndexed { page, image ->
                     db.receiptDao().insertImage(
                         ReceiptImageEntity(
@@ -127,13 +140,15 @@ class RoomReceiptRepository(
     }
 
     override suspend fun runOcr(id: Long, dayFirst: Boolean) {
-        val pages = withContextRead { db ->
+        val (pages, stored) = withContextRead { db ->
             val receipt = db.receiptDao().getById(id) ?: throw ReceiptException.NotFound()
             if (!receipt.isEditable) throw ReceiptException.NotEditable()
-            db.receiptDao().getImages(id)
+            val text = if (receipt.ocrEngine == PDF_TEXT_ENGINE) db.receiptDao().getOcrLines(id).map { it.toDomain() } else null
+            db.receiptDao().getImages(id) to text
         }
+        val engine = if (stored != null) PDF_TEXT_ENGINE else ocr.name
         val lines = try {
-            pages.flatMap { image -> ocr.recognize(image.page, images.read(image.fileName, image.contentSha256)) }
+            stored ?: pages.flatMap { image -> ocr.recognize(image.page, images.read(image.fileName, image.contentSha256)) }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             write { db ->
@@ -161,7 +176,7 @@ class RoomReceiptRepository(
                     fieldSources = parsed.sources.entries.joinToString(";") { (field, source) ->
                         "${field.name}=${source.page}:${source.line}"
                     },
-                    ocrEngine = ocr.name,
+                    ocrEngine = engine,
                     ocrError = null,
                     updatedAt = clock.millis(),
                 ),
@@ -582,6 +597,17 @@ class RoomReceiptRepository(
             field to OcrSource(page, line)
         }.toMap()
 }
+
+/** Recorded as the reading engine when a receipt's text came from the PDF itself. */
+const val PDF_TEXT_ENGINE = "pdf-text"
+
+private fun ReceiptOcrLineEntity.toDomain() = OcrLine(
+    page = page,
+    index = lineIndex,
+    text = text,
+    confidence = confidence,
+    box = if (boxLeft != null && boxTop != null && boxRight != null && boxBottom != null) OcrBox(boxLeft, boxTop, boxRight, boxBottom) else null,
+)
 
 private fun OcrLine.toEntity(receiptId: Long) = ReceiptOcrLineEntity(
     receiptId = receiptId,

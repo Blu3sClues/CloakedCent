@@ -152,6 +152,11 @@ class PageInput(
     val crop: CropRect? = null,
     /** Grayscale and contrast stretch for faded thermal paper. */
     val enhance: Boolean = false,
+    /**
+     * Text printed in a digital PDF, positioned on this image; used instead of OCR when every
+     * page of a receipt has it. Must be null once the image is rotated or cropped.
+     */
+    val embeddedText: List<OcrLine>? = null,
 )
 
 data class CropRect(val left: Float, val top: Float, val right: Float, val bottom: Float) {

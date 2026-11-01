@@ -84,9 +84,13 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.pocketbudget.app.PocketBudgetApp
 import com.pocketbudget.app.R
+import com.pocketbudget.app.data.receipt.PdfImportException
+import com.pocketbudget.app.data.receipt.PdfPages
+import com.pocketbudget.app.data.receipt.PdfReceiptRenderer
 import com.pocketbudget.app.data.receipt.ReceiptImageProcessor
 import com.pocketbudget.app.domain.model.CropRect
 import com.pocketbudget.app.domain.model.ImportOutcome
+import com.pocketbudget.app.domain.model.OcrLine
 import com.pocketbudget.app.domain.model.PageInput
 import com.pocketbudget.app.domain.repository.ReceiptRepository
 import com.pocketbudget.app.ui.components.BackTopBar
@@ -110,15 +114,22 @@ class PendingPage(
     val rotation: Int = 0,
     val crop: CropRect? = null,
     val enhance: Boolean = false,
+    /** Text printed in a digital PDF page; dropped once the page is rotated or cropped. */
+    val embeddedText: List<OcrLine>? = null,
 ) {
     fun copy(rotation: Int = this.rotation, crop: CropRect? = this.crop, enhance: Boolean = this.enhance) =
-        PendingPage(key, bytes, preview, rotation, crop, enhance)
+        PendingPage(
+            key, bytes, preview, rotation, crop, enhance,
+            embeddedText.takeIf { rotation == this.rotation && crop == this.crop },
+        )
 }
 
 data class CaptureUiState(
     val pages: List<PendingPage> = emptyList(),
     val busy: Boolean = false,
     val error: Int? = null,
+    /** Information that is not an error, e.g. pages left out of a long PDF. */
+    val notice: Int? = null,
     val duplicateOf: Long? = null,
     val createdId: Long? = null,
 )
@@ -126,6 +137,7 @@ data class CaptureUiState(
 class CaptureViewModel(
     private val receipts: ReceiptRepository,
     private val readUri: suspend (Uri) -> ByteArray,
+    private val readPdf: suspend (Uri) -> PdfPages = { PdfPages(emptyList(), false) },
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CaptureUiState())
@@ -136,11 +148,11 @@ class CaptureViewModel(
     private var nextKey = 0L
 
     /** [cameraRotation] is applied only if the photo has no EXIF orientation of its own. */
-    fun addPhoto(bytes: ByteArray, cameraRotation: Int = 0) = viewModelScope.launch {
+    fun addPhoto(bytes: ByteArray, cameraRotation: Int = 0, embeddedText: List<OcrLine>? = null) = viewModelScope.launch {
         try {
             val page = withContext(Dispatchers.Default) {
                 val rotation = if (ReceiptImageProcessor.hasExifRotation(bytes)) 0 else cameraRotation
-                PendingPage(nextKey++, bytes, ReceiptImageProcessor.preview(bytes, PREVIEW_SIZE), rotation)
+                PendingPage(nextKey++, bytes, ReceiptImageProcessor.preview(bytes, PREVIEW_SIZE), rotation, embeddedText = embeddedText)
             }
             _state.update { it.copy(pages = it.pages + page, error = null) }
         } catch (e: CancellationException) {
@@ -162,6 +174,30 @@ class CaptureViewModel(
         }
     }
 
+    /** Each PDF page (or slice of a long page) becomes a receipt page, in order. */
+    fun addPdf(uri: Uri) {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true, error = null, notice = null) }
+        viewModelScope.launch {
+            try {
+                val pdf = withContext(Dispatchers.IO) { readPdf(uri) }
+                pdf.images.forEachIndexed { i, image -> addPhoto(image, embeddedText = pdf.text.getOrNull(i)).join() }
+                _state.update {
+                    it.copy(busy = false, notice = if (pdf.truncated) R.string.capture_pdf_truncated else null)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val message = when ((e as? PdfImportException)?.reason) {
+                    PdfImportException.Reason.PASSWORD_PROTECTED -> R.string.capture_pdf_protected
+                    PdfImportException.Reason.EMPTY -> R.string.capture_pdf_empty
+                    else -> R.string.capture_pdf_error
+                }
+                _state.update { it.copy(busy = false, error = message) }
+            }
+        }
+    }
+
     fun updatePage(key: Long, change: (PendingPage) -> PendingPage) =
         _state.update { s -> s.copy(pages = s.pages.map { if (it.key == key) change(it) else it }) }
 
@@ -177,7 +213,7 @@ class CaptureViewModel(
         _state.update { it.copy(busy = true, error = null, duplicateOf = null) }
         viewModelScope.launch {
             try {
-                val inputs = pages.map { PageInput(it.bytes, it.rotation, it.crop, it.enhance) }
+                val inputs = pages.map { PageInput(it.bytes, it.rotation, it.crop, it.enhance, it.embeddedText) }
                 when (val outcome = receipts.import(inputs, requestId, allowDuplicate)) {
                     is ImportOutcome.Created -> _state.update { it.copy(busy = false, createdId = outcome.receiptId) }
                     is ImportOutcome.Duplicate -> _state.update { it.copy(busy = false, duplicateOf = outcome.existingReceiptId) }
@@ -196,15 +232,19 @@ class CaptureViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as PocketBudgetApp
-                CaptureViewModel(app.container.receiptRepository) { uri ->
-                    val stream = app.contentResolver.openInputStream(uri) ?: error("Unreadable")
-                    stream.use { input ->
-                        // Bounded read: refuse anything larger than an image could reasonably be.
-                        val bytes = input.readNBytesCompat(ReceiptImageProcessor.MAX_INPUT_BYTES + 1)
-                        require(bytes.size <= ReceiptImageProcessor.MAX_INPUT_BYTES) { "Too large" }
-                        bytes
-                    }
-                }
+                CaptureViewModel(
+                    app.container.receiptRepository,
+                    readUri = { uri ->
+                        val stream = app.contentResolver.openInputStream(uri) ?: error("Unreadable")
+                        stream.use { input ->
+                            // Bounded read: refuse anything larger than an image could reasonably be.
+                            val bytes = input.readNBytesCompat(ReceiptImageProcessor.MAX_INPUT_BYTES + 1)
+                            require(bytes.size <= ReceiptImageProcessor.MAX_INPUT_BYTES) { "Too large" }
+                            bytes
+                        }
+                    },
+                    readPdf = { uri -> PdfReceiptRenderer.render(app, uri) },
+                )
             }
         }
     }
@@ -242,6 +282,10 @@ fun ReceiptCaptureRoute(
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_PICK)) { uris ->
         if (uris.isNotEmpty()) viewModel.addUris(uris)
+    }
+    // The system document picker: read-only access to the one file chosen, no storage permission.
+    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.addPdf(uri)
     }
 
     if (cameraOpen) {
@@ -283,8 +327,13 @@ fun ReceiptCaptureRoute(
                     Text(stringResource(R.string.capture_choose_photos), Modifier.padding(start = 8.dp))
                 }
             }
+            OutlinedButton(onClick = { pdfPicker.launch(arrayOf("application/pdf")) }, enabled = !state.busy) {
+                Icon(painterResource(R.drawable.ic_receipt), null)
+                Text(stringResource(R.string.capture_import_pdf), Modifier.padding(start = 8.dp))
+            }
             if (cameraDenied) Text(stringResource(R.string.capture_camera_denied), color = MaterialTheme.colorScheme.error)
             state.error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
+            state.notice?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium) }
 
             if (state.pages.isNotEmpty()) {
                 Text(stringResource(R.string.capture_pages, state.pages.size), style = MaterialTheme.typography.titleSmall)
