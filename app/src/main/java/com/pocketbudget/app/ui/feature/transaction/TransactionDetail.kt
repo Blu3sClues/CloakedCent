@@ -43,7 +43,12 @@ import com.pocketbudget.app.domain.model.TransactionRevision
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
 import com.pocketbudget.app.domain.repository.TransactionRepository
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import com.pocketbudget.app.core.money.Money
+import com.pocketbudget.app.ui.components.AmountInput
 import com.pocketbudget.app.ui.components.BackTopBar
+import com.pocketbudget.app.ui.components.MoneyField
 import com.pocketbudget.app.ui.components.ConfirmDialog
 import com.pocketbudget.app.ui.components.MoneyText
 import com.pocketbudget.app.ui.components.SectionHeader
@@ -81,7 +86,8 @@ class TransactionDetailViewModel(
     private val _error = MutableStateFlow<Int?>(null)
     val error: StateFlow<Int?> = _error.asStateFlow()
 
-    fun markCompleted() = act { transactions.confirm(id) }
+    /** [actualAmount] replaces the projected amount (variable bills) in the same atomic step. */
+    fun markCompleted(actualAmount: Money?) = act { transactions.confirm(id, actualAmount) }
     fun delete() = act { transactions.delete(id) }
 
     private fun act(action: suspend () -> Unit) {
@@ -126,10 +132,11 @@ fun TransactionDetailScreen(
     @StringRes error: Int?,
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
-    onMarkCompleted: () -> Unit,
+    onMarkCompleted: (Money?) -> Unit,
     onDelete: () -> Unit,
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmAmount by remember { mutableStateOf<String?>(null) }
     val detail = (state as? DetailState.Loaded)?.detail
     Scaffold(
         topBar = {
@@ -154,7 +161,7 @@ fun TransactionDetailScreen(
                     error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
                     if (!state.detail.isDeleted) {
                         if (state.detail.status.isScheduled) {
-                            Button(onMarkCompleted, Modifier.fillMaxWidth()) {
+                            Button({ confirmAmount = AmountInput.format(state.detail.amount.abs()) }, Modifier.fillMaxWidth()) {
                                 Text(stringResource(markCompletedLabel(state.detail.type)))
                             }
                         }
@@ -166,6 +173,30 @@ fun TransactionDetailScreen(
                 }
             }
         }
+    }
+    val amountText = confirmAmount
+    if (amountText != null && detail != null) {
+        val parsed = AmountInput.parse(amountText)
+        AlertDialog(
+            onDismissRequest = { confirmAmount = null },
+            title = { Text(stringResource(markCompletedLabel(detail.type))) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.confirm_amount_body))
+                    MoneyField(
+                        amountText, { confirmAmount = it }, stringResource(R.string.field_amount),
+                        isError = parsed == null || !parsed.isPositive,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { confirmAmount = null; onMarkCompleted(parsed) },
+                    enabled = parsed != null && parsed.isPositive,
+                ) { Text(stringResource(R.string.action_confirm)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmAmount = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
     }
     if (confirmDelete) {
         ConfirmDialog(

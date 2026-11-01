@@ -101,7 +101,7 @@ class FakeLedger {
         override suspend fun delete(id: Long) {
             check()
         }
-        override suspend fun confirm(id: Long) = true
+        override suspend fun confirm(id: Long, actualAmount: Money?) = true
         override suspend fun adjustBalance(adjustment: com.pocketbudget.app.domain.model.NewAdjustment): Long {
             check(); adjustments += adjustment; return adjustments.size.toLong()
         }

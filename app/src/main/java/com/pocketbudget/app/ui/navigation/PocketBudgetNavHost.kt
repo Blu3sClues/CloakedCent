@@ -14,6 +14,15 @@ import com.pocketbudget.app.ui.feature.dashboard.DashboardRoute
 import com.pocketbudget.app.ui.feature.history.HistoryRoute
 import com.pocketbudget.app.ui.feature.history.HistoryViewModel
 import com.pocketbudget.app.ui.feature.settings.SettingsRoute
+import com.pocketbudget.app.ui.feature.budget.ARG_BUDGET_ID
+import com.pocketbudget.app.ui.feature.budget.BudgetDetailRoute
+import com.pocketbudget.app.ui.feature.budget.BudgetEditorRoute
+import com.pocketbudget.app.ui.feature.budget.BudgetsRoute
+import com.pocketbudget.app.ui.feature.recurring.ARG_SCHEDULE_ID
+import com.pocketbudget.app.ui.feature.recurring.RecurringDetailRoute
+import com.pocketbudget.app.ui.feature.recurring.RecurringEditorRoute
+import com.pocketbudget.app.ui.feature.recurring.RecurringListRoute
+import com.pocketbudget.app.ui.feature.recurring.UpcomingRoute
 import com.pocketbudget.app.ui.feature.transaction.TransactionDetailRoute
 import com.pocketbudget.app.ui.feature.transaction.TransactionEditorRoute
 import com.pocketbudget.app.ui.feature.transaction.TransactionEditorViewModel
@@ -21,6 +30,18 @@ import com.pocketbudget.app.ui.feature.transaction.TransactionEditorViewModel
 private object Routes {
     const val DASHBOARD = "dashboard"
     const val SETTINGS = "settings"
+    const val BUDGETS = "budgets"
+    const val BUDGET = "budget/{$ARG_BUDGET_ID}"
+    const val BUDGET_EDIT = "budget-edit?$ARG_BUDGET_ID={$ARG_BUDGET_ID}"
+    const val RECURRING = "recurring"
+    const val SCHEDULE = "recurring/{$ARG_SCHEDULE_ID}"
+    const val SCHEDULE_EDIT = "recurring-edit?$ARG_SCHEDULE_ID={$ARG_SCHEDULE_ID}"
+    const val UPCOMING = "upcoming"
+
+    fun budget(id: Long) = "budget/$id"
+    fun budgetEdit(id: Long?) = "budget-edit?$ARG_BUDGET_ID=${id ?: -1}"
+    fun schedule(id: Long) = "recurring/$id"
+    fun scheduleEdit(id: Long?) = "recurring-edit?$ARG_SCHEDULE_ID=${id ?: -1}"
     const val ACCOUNT = "account?${AccountEditorViewModel.ARG_ACCOUNT_ID}={${AccountEditorViewModel.ARG_ACCOUNT_ID}}"
     const val HISTORY = "history?${HistoryViewModel.ARG_ACCOUNT_ID}={${HistoryViewModel.ARG_ACCOUNT_ID}}"
     const val NEW_TRANSACTION = "transaction/new?${TransactionEditorViewModel.ARG_TYPE}={${TransactionEditorViewModel.ARG_TYPE}}"
@@ -53,6 +74,9 @@ fun PocketBudgetNavHost() {
                 onOpenTransaction = { nav.navigate(Routes.transaction(it)) },
                 onOpenHistory = { nav.navigate(Routes.history(null)) },
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                onOpenBudgets = { nav.navigate(Routes.BUDGETS) },
+                onOpenRecurring = { nav.navigate(Routes.RECURRING) },
+                onOpenUpcoming = { nav.navigate(Routes.UPCOMING) },
             )
         }
         composable(Routes.ACCOUNT, listOf(optionalId(AccountEditorViewModel.ARG_ACCOUNT_ID))) {
@@ -74,6 +98,26 @@ fun PocketBudgetNavHost() {
             )
         }
         composable(Routes.SETTINGS) { SettingsRoute(onBack = back) }
+        composable(Routes.BUDGETS) {
+            BudgetsRoute(onBack = back, onOpen = { nav.navigate(Routes.budget(it)) }, onAdd = { nav.navigate(Routes.budgetEdit(null)) })
+        }
+        composable(Routes.BUDGET, listOf(navArgument(ARG_BUDGET_ID) { type = NavType.LongType })) {
+            BudgetDetailRoute(onBack = back, onEdit = { nav.navigate(Routes.budgetEdit(it)) })
+        }
+        composable(Routes.BUDGET_EDIT, listOf(optionalId(ARG_BUDGET_ID))) { BudgetEditorRoute(onDone = back) }
+        composable(Routes.RECURRING) {
+            RecurringListRoute(
+                onBack = back,
+                onOpen = { nav.navigate(Routes.schedule(it)) },
+                onAdd = { nav.navigate(Routes.scheduleEdit(null)) },
+                onUpcoming = { nav.navigate(Routes.UPCOMING) },
+            )
+        }
+        composable(Routes.SCHEDULE, listOf(navArgument(ARG_SCHEDULE_ID) { type = NavType.LongType })) {
+            RecurringDetailRoute(onBack = back, onEdit = { nav.navigate(Routes.scheduleEdit(it)) })
+        }
+        composable(Routes.SCHEDULE_EDIT, listOf(optionalId(ARG_SCHEDULE_ID))) { RecurringEditorRoute(onDone = back) }
+        composable(Routes.UPCOMING) { UpcomingRoute(onBack = back, onOpenTransaction = { nav.navigate(Routes.transaction(it)) }) }
         composable(
             Routes.NEW_TRANSACTION,
             listOf(

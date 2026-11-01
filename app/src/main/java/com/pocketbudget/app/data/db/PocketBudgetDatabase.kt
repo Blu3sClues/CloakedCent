@@ -5,11 +5,18 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.pocketbudget.app.data.db.dao.AccountDao
 import com.pocketbudget.app.data.db.dao.AppMetadataDao
+import com.pocketbudget.app.data.db.dao.BudgetDao
+import com.pocketbudget.app.data.db.dao.RecurringDao
 import com.pocketbudget.app.data.db.dao.CategoryDao
 import com.pocketbudget.app.data.db.dao.PayeeDao
 import com.pocketbudget.app.data.db.dao.TransactionDao
 import com.pocketbudget.app.data.db.entity.AccountEntity
 import com.pocketbudget.app.data.db.entity.AppMetadataEntity
+import com.pocketbudget.app.data.db.entity.BudgetAlertEntity
+import com.pocketbudget.app.data.db.entity.BudgetEntity
+import com.pocketbudget.app.data.db.entity.BudgetLimitEntity
+import com.pocketbudget.app.data.db.entity.RecurringOccurrenceEntity
+import com.pocketbudget.app.data.db.entity.RecurringScheduleEntity
 import com.pocketbudget.app.data.db.entity.CategoryEntity
 import com.pocketbudget.app.data.db.entity.PayeeEntity
 import com.pocketbudget.app.data.db.entity.TransactionEntity
@@ -29,8 +36,13 @@ import com.pocketbudget.app.data.db.entity.TransferEntity
         TransferEntity::class,
         TransactionEntity::class,
         TransactionRevisionEntity::class,
+        BudgetEntity::class,
+        BudgetLimitEntity::class,
+        BudgetAlertEntity::class,
+        RecurringScheduleEntity::class,
+        RecurringOccurrenceEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -41,6 +53,8 @@ abstract class PocketBudgetDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun payeeDao(): PayeeDao
     abstract fun transactionDao(): TransactionDao
+    abstract fun budgetDao(): BudgetDao
+    abstract fun recurringDao(): RecurringDao
 
     companion object {
         const val NAME = "pocket_budget.db"

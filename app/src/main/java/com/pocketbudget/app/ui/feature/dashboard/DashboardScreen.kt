@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import com.pocketbudget.app.ui.feature.planning.BudgetProgressRow
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,6 +74,9 @@ class DashboardActions(
     val onOpenTransaction: (Long) -> Unit = {},
     val onOpenHistory: () -> Unit = {},
     val onOpenSettings: () -> Unit = {},
+    val onOpenBudgets: () -> Unit = {},
+    val onOpenRecurring: () -> Unit = {},
+    val onOpenUpcoming: () -> Unit = {},
 )
 
 @Composable
@@ -82,6 +87,9 @@ fun DashboardRoute(
     onOpenTransaction: (Long) -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenBudgets: () -> Unit,
+    onOpenRecurring: () -> Unit,
+    onOpenUpcoming: () -> Unit,
     viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -96,6 +104,9 @@ fun DashboardRoute(
             onOpenTransaction = onOpenTransaction,
             onOpenHistory = onOpenHistory,
             onOpenSettings = onOpenSettings,
+            onOpenBudgets = onOpenBudgets,
+            onOpenRecurring = onOpenRecurring,
+            onOpenUpcoming = onOpenUpcoming,
         ),
     )
 }
@@ -149,6 +160,25 @@ fun DashboardScreen(uiState: DashboardUiState, actions: DashboardActions) {
     }
 }
 
+private const val DASHBOARD_BUDGETS = 3
+
+@Composable
+private fun PlanningShortcuts(overdueCount: Int, actions: DashboardActions) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AssistChip(onClick = actions.onOpenBudgets, label = { Text(stringResource(R.string.budgets_title)) })
+        AssistChip(onClick = actions.onOpenRecurring, label = { Text(stringResource(R.string.recurring_title)) })
+        AssistChip(
+            onClick = actions.onOpenUpcoming,
+            label = {
+                Text(
+                    if (overdueCount > 0) stringResource(R.string.upcoming_with_overdue, overdueCount) else stringResource(R.string.upcoming_title),
+                    color = if (overdueCount > 0) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified,
+                )
+            },
+        )
+    }
+}
+
 @Composable
 private fun AddMenuButton(onAdd: (TransactionType) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
@@ -173,6 +203,15 @@ private fun AddMenuButton(onAdd: (TransactionType) -> Unit) {
 @Composable
 private fun ReadyContent(state: DashboardUiState.Ready, actions: DashboardActions) {
     BalanceHeroCard(state.totals, state.thisMonth)
+    PlanningShortcuts(state.overdueCount, actions)
+    if (state.budgets.isNotEmpty()) {
+        SectionHeader(
+            stringResource(R.string.budgets_title),
+            actionLabel = stringResource(R.string.action_see_all),
+            onAction = actions.onOpenBudgets,
+        )
+        ListCard(state.budgets.take(DASHBOARD_BUDGETS)) { BudgetProgressRow(it, Modifier.clickable { actions.onOpenBudgets() }.padding(16.dp)) }
+    }
 
     SectionHeader(
         stringResource(R.string.dashboard_accounts),

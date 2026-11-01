@@ -316,12 +316,19 @@ class RoomTransactionRepository(
         }
     }
 
-    override suspend fun confirm(id: Long): Boolean = write { db ->
+    override suspend fun confirm(id: Long, actualAmount: Money?): Boolean = write { db ->
+        if (actualAmount != null) requirePositive(actualAmount)
         val current = db.transactionDao().getById(id) ?: throw LedgerException.NotFound("Transaction $id")
         val entries = legsOf(db, current)
         if (entries.any { it.isDeleted || !it.status.isScheduled }) return@write false
-        entries.forEach {
-            applyChange(db, it, it.copy(status = it.type.completedStatus), RevisionAction.STATUS_CHANGE)
+        for (entry in entries) {
+            var latest = entry
+            if (actualAmount != null && actualAmount.cents != Math.abs(entry.amountCents)) {
+                val signedAmount = if (entry.amountCents < 0) -actualAmount else actualAmount
+                applyChange(db, entry, entry.copy(amountCents = signedAmount.cents), RevisionAction.UPDATE)
+                latest = db.transactionDao().getById(entry.id)!!
+            }
+            applyChange(db, latest, latest.copy(status = latest.type.completedStatus), RevisionAction.STATUS_CHANGE)
         }
         true
     }

@@ -153,4 +153,119 @@
     <string name="adjustment_hint_balance_only">Corrects the balance. Not counted as income or spending.</string>
     <string name="adjustment_hint_income">Counted in income reports.</string>
     <string name="adjustment_hint_expense">Counted in spending reports.</string>
+
+    <!-- Confirmation -->
+    <string name="confirm_amount_body">Check the amount. Change it if the actual amount was different.</string>
+    <string name="action_confirm">Confirm</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_restart">Restart</string>
+
+    <!-- Notifications -->
+    <string name="channel_reminders">Upcoming payments</string>
+    <string name="channel_budgets">Budget alerts</string>
+    <string name="notify_payment_due_title">%1$s is due soon</string>
+    <string name="notify_income_due_title">%1$s is expected soon</string>
+    <string name="notify_overdue_title">%1$s is overdue</string>
+    <string name="notify_budget_title">%1$s: %2$d%% of budget used</string>
+    <string name="notify_budget_body">Spent %1$s of %2$s</string>
+    <string name="notify_public_text">You have a new reminder</string>
+    <string name="notify_permission_title">Get reminders</string>
+    <string name="notify_permission_body">Allow notifications for upcoming payments and budget alerts. Names and amounts are hidden on the lock screen.</string>
+    <string name="notify_permission_action">Allow notifications</string>
+
+    <!-- Budgets -->
+    <string name="budgets_title">Budgets</string>
+    <string name="budget_add">Add budget</string>
+    <string name="budgets_empty_title">No budgets yet</string>
+    <string name="budgets_empty_body">Create a budget for a category to track spending against a limit.</string>
+    <string name="budget_paused">Paused</string>
+    <string name="budget_not_in_period">Not in an active period</string>
+    <string name="budget_spent_of">Spent %1$s of %2$s · %3$s left</string>
+    <string name="budget_spent_over">Spent %1$s of %2$s · %3$s over</string>
+    <string name="budget_rolled_over">Includes %1$s rolled over</string>
+    <string name="budget_alert_reached">%1$d%% alert reached</string>
+    <string name="budget_children_exceed">Sub-budget limits add up to more than this budget.</string>
+    <string name="budget_history">History</string>
+    <string name="budget_history_spent">Spent</string>
+    <string name="action_archive_budget">Archive budget</string>
+    <string name="confirm_archive_budget_title">Archive this budget?</string>
+    <string name="confirm_archive_budget_body">It will be hidden. Your transactions are not affected.</string>
+    <string name="budget_new_title">New budget</string>
+    <string name="budget_edit_title">Edit budget</string>
+    <string name="budget_name">Budget name</string>
+    <string name="budget_category_hint">Includes all subcategories</string>
+    <string name="budget_limit">Limit per period</string>
+    <string name="budget_period">Period</string>
+    <string name="budget_start">Starts</string>
+    <string name="budget_end">Ends</string>
+    <string name="budget_rollover">Roll over unused budget</string>
+    <string name="budget_rollover_hint">Unspent money is added to the next period</string>
+    <string name="budget_alerts">Alert at (%)</string>
+    <string name="budget_alerts_hint">Comma-separated, e.g. 50, 75, 90, 100</string>
+    <string name="budget_alerts_invalid">Use whole percentages from 1 to 1000</string>
+    <string name="period_weekly">Weekly</string>
+    <string name="period_monthly">Monthly</string>
+    <string name="period_quarterly">Quarterly</string>
+    <string name="period_yearly">Yearly</string>
+    <string name="period_custom">Custom range</string>
+
+    <!-- Recurring -->
+    <string name="recurring_title">Recurring</string>
+    <string name="recurring_add">Add recurring</string>
+    <string name="recurring_empty_title">No recurring items</string>
+    <string name="recurring_empty_body">Add paychecks, rent, bills and subscriptions. They appear as scheduled entries before they are due.</string>
+    <string name="recurring_next">Next %1$s</string>
+    <string name="recurring_variable_short">Variable</string>
+    <string name="recurring_state_active">Active</string>
+    <string name="recurring_state_paused">Paused</string>
+    <string name="recurring_state_cancelled">Cancelled</string>
+    <string name="recurring_nothing_to_skip">There is no upcoming occurrence to skip.</string>
+    <string name="recurring_next_dates">Next dates</string>
+    <string name="recurring_history_note">Editing this schedule never changes past or already created transactions.</string>
+    <string name="action_skip_next">Skip next</string>
+    <string name="action_cancel_schedule">Cancel schedule</string>
+    <string name="confirm_cancel_schedule_title">Cancel this schedule?</string>
+    <string name="confirm_cancel_schedule_body">No new occurrences will be created and future scheduled entries are removed. Completed and overdue transactions are kept.</string>
+    <string name="recurring_new_title">New recurring item</string>
+    <string name="recurring_edit_title">Edit recurring item</string>
+    <string name="recurring_edit_note">Changes apply to occurrences that have not been created yet.</string>
+    <string name="recurring_name">Name</string>
+    <string name="recurring_kind">Kind</string>
+    <string name="recurring_amount_estimate">Estimated amount</string>
+    <string name="recurring_variable">Variable amount</string>
+    <string name="recurring_variable_hint">Confirm the actual amount each time</string>
+    <string name="recurring_frequency">Repeats</string>
+    <string name="recurring_interval">Every how many?</string>
+    <string name="recurring_first_date">First date</string>
+    <string name="recurring_has_end">Has an end date</string>
+    <string name="recurring_end_date">End date</string>
+    <string name="freq_daily">Daily</string>
+    <string name="freq_weekly">Weekly</string>
+    <string name="freq_biweekly">Every 2 weeks</string>
+    <string name="freq_monthly">Monthly</string>
+    <string name="freq_quarterly">Quarterly</string>
+    <string name="freq_yearly">Yearly</string>
+    <string name="freq_custom_days">Every %1$s days</string>
+    <string name="freq_custom_weeks">Every %1$s weeks</string>
+    <string name="freq_custom_months">Every %1$s months</string>
+    <string name="kind_paycheck">Paycheck</string>
+    <string name="kind_other_income">Other income</string>
+    <string name="kind_rent">Rent</string>
+    <string name="kind_mortgage">Mortgage</string>
+    <string name="kind_utility">Utility</string>
+    <string name="kind_subscription">Subscription</string>
+    <string name="kind_loan">Loan repayment</string>
+    <string name="kind_insurance">Insurance</string>
+    <string name="kind_other">Other</string>
+
+    <!-- Upcoming -->
+    <string name="upcoming_title">Upcoming</string>
+    <string name="upcoming_with_overdue">Upcoming · Overdue: %1$d</string>
+    <string name="upcoming_empty_title">Nothing upcoming</string>
+    <string name="upcoming_empty_body">Scheduled and recurring items for the next 60 days appear here.</string>
+    <string name="upcoming_overdue">Overdue (%1$d)</string>
+    <string name="upcoming_state_overdue">Overdue</string>
+    <string name="upcoming_state_projected">Projected</string>
+    <string name="upcoming_note">Recurring items become scheduled transactions 14 days before they are due. Tap one to confirm it.</string>
 </resources>

@@ -127,7 +127,7 @@ class DashboardViewModelTest {
         override suspend fun recordTransfer(transfer: NewTransfer) = 0L
         override suspend fun edit(id: Long, edit: TransactionEdit) = Unit
         override suspend fun delete(id: Long) = Unit
-        override suspend fun confirm(id: Long) = false
+        override suspend fun confirm(id: Long, actualAmount: Money?) = false
         override suspend fun adjustBalance(adjustment: com.pocketbudget.app.domain.model.NewAdjustment) = 0L
         override fun observeRecent(limit: Int): Flow<List<TransactionListItem>> = flowOf(emptyList())
         override fun search(filter: TransactionFilter): Flow<List<TransactionListItem>> = flowOf(emptyList())

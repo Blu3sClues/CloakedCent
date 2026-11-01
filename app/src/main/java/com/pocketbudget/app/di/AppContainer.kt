@@ -14,7 +14,11 @@ import com.pocketbudget.app.dev.SampleData
 import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.domain.repository.CategoryRepository
 import com.pocketbudget.app.domain.repository.PayeeRepository
+import com.pocketbudget.app.data.repository.RoomBudgetRepository
+import com.pocketbudget.app.data.repository.RoomRecurringRepository
 import com.pocketbudget.app.data.settings.SharedPreferencesSettingsRepository
+import com.pocketbudget.app.domain.repository.BudgetRepository
+import com.pocketbudget.app.domain.repository.RecurringRepository
 import com.pocketbudget.app.domain.repository.SettingsRepository
 import com.pocketbudget.app.domain.repository.StorageRepository
 import com.pocketbudget.app.domain.repository.TransactionRepository
@@ -54,6 +58,8 @@ class AppContainer(context: Context) {
     val transactionRepository: TransactionRepository by lazy { RoomTransactionRepository({ database }) }
 
     val settingsRepository: SettingsRepository by lazy { SharedPreferencesSettingsRepository(appContext) }
+    val budgetRepository: BudgetRepository by lazy { RoomBudgetRepository({ database }) }
+    val recurringRepository: RecurringRepository by lazy { RoomRecurringRepository({ database }, transactionRepository) }
 
     /** Debug builds only (see src/debug); null in release. */
     val sampleSeeder: (suspend () -> Unit)? = SampleData.seeder(this)

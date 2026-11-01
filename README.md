@@ -187,6 +187,32 @@ so every balance comes from a single source and nothing can be double counted.
   opening balance is set only at creation. Classification: *balance only*
   (type `ADJUSTMENT`, excluded from income/expense), *income* (increases only),
   or *expense* (decreases only).
+
+### Budgets and recurring finances (schema v5)
+
+- **Budgets** cover a category and all its subcategories, with weekly
+  (aligned to the start date's weekday), monthly, quarterly, yearly
+  (calendar-aligned) or custom-range periods. Spending counts only completed,
+  non-deleted expenses, computed from each budget's own category subtree, so
+  a parent budget includes child spending exactly once. Limit changes are
+  stored in `budget_limits` and apply from the current period, so history is
+  never rewritten. Optional rollover carries only unused allocation forward;
+  "Restart" begins a new rollover cycle. Alert thresholds (e.g. 50/75/90/100%)
+  notify once per period (`budget_alerts`).
+- **Recurring schedules** generate ordinary *scheduled* transactions through
+  the existing ledger 14 days before they are due. Duplicates are impossible:
+  each occurrence has a unique `(schedule_id, due_date)` row and a deterministic
+  request id (`recurring-<id>-<epochDay>`). Dates are always computed from the
+  start date, so month-end and Feb 29 anchors are kept. Editing affects only
+  occurrences not yet generated; pausing, resuming (missed occurrences are not
+  back-filled), skipping and cancelling never touch completed transactions.
+  Confirming accepts the actual amount for variable bills (atomic, audited).
+- **Background work:** WorkManager runs `PlanningWorker` on app start and every
+  12 hours to generate occurrences, post due/overdue reminders and budget
+  alerts. Notifications need `POST_NOTIFICATIONS` on Android 13+ (requested in
+  context) and hide names and amounts on the lock screen. Dates are local
+  calendar dates evaluated at run time, so time zone changes are handled.
+
 - **Amounts in forms** are typed freely and shown as currency (e.g. `$38.00`)
   when the field loses focus; `AmountInput` parses locale grouping/decimal
   separators to exact cents.

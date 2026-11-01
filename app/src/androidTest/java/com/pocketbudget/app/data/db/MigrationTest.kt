@@ -248,6 +248,34 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate4To5AddsPlanningTablesAndKeepsLedger() = runTest {
+        helper.createDatabase(TEST_DB, 4).apply {
+            execSQL(
+                """
+                INSERT INTO accounts (id, name, type, opening_balance_cents, include_in_totals, is_archived, created_at, updated_at)
+                VALUES (1, 'Checking', 'CHECKING', 10000, 1, 0, 0, 0)
+                """,
+            )
+            execSQL(
+                """
+                INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on,
+                    revision, is_deleted, is_adjustment, created_at, updated_at)
+                VALUES (1, 'r1', 1, 'EXPENSE', -2500, 'SPENT', 20400, 1, 0, 0, 0, 0)
+                """,
+            )
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, Migrations.MIGRATION_4_5).apply {
+            query("SELECT COUNT(*) FROM budgets").use { it.moveToFirst(); assertEquals(0, it.getInt(0)) }
+            query("SELECT COUNT(*) FROM recurring_schedules").use { it.moveToFirst(); assertEquals(0, it.getInt(0)) }
+            close()
+        }
+        val db = PocketBudgetDatabaseFactory.create(context, passphrase, name = TEST_DB)
+        helper.closeWhenFinished(db)
+        assertEquals(Money(7_500), RoomAccountRepository({ db }).observeBalances().first().single().current)
+    }
+
+    @Test
     fun migrateFromFirstVersionToLatest() = runTest {
         helper.createDatabase(TEST_DB, FIRST_VERSION).apply {
             execSQL(

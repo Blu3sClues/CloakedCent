@@ -90,5 +90,26 @@ object Migrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+    /** v5: budgets (with limit history and alert log) and recurring schedules/occurrences. Additive only. */
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            listOf(
+                "CREATE TABLE IF NOT EXISTS `budgets` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `category_id` INTEGER NOT NULL, `period_type` TEXT NOT NULL, `start_date` INTEGER NOT NULL, `end_date` INTEGER, `cycle_start` INTEGER NOT NULL, `rollover` INTEGER NOT NULL, `alert_thresholds` TEXT NOT NULL, `state` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`category_id`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE INDEX IF NOT EXISTS `index_budgets_category_id` ON `budgets` (`category_id`)",
+                "CREATE TABLE IF NOT EXISTS `budget_limits` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `budget_id` INTEGER NOT NULL, `effective_from` INTEGER NOT NULL, `amount_cents` INTEGER NOT NULL, FOREIGN KEY(`budget_id`) REFERENCES `budgets`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_budget_limits_budget_id_effective_from` ON `budget_limits` (`budget_id`, `effective_from`)",
+                "CREATE TABLE IF NOT EXISTS `budget_alerts` (`budget_id` INTEGER NOT NULL, `period_start` INTEGER NOT NULL, `threshold` INTEGER NOT NULL, `raised_at` INTEGER NOT NULL, PRIMARY KEY(`budget_id`, `period_start`, `threshold`), FOREIGN KEY(`budget_id`) REFERENCES `budgets`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE TABLE IF NOT EXISTS `recurring_schedules` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `kind` TEXT NOT NULL, `type` TEXT NOT NULL, `account_id` INTEGER NOT NULL, `to_account_id` INTEGER, `amount_cents` INTEGER NOT NULL, `variable_amount` INTEGER NOT NULL, `category_id` INTEGER, `payee_id` INTEGER, `note` TEXT, `frequency` TEXT NOT NULL, `interval_count` INTEGER NOT NULL, `start_date` INTEGER NOT NULL, `end_date` INTEGER, `state` TEXT NOT NULL, `generated_through` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`account_id`) REFERENCES `accounts`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`to_account_id`) REFERENCES `accounts`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`category_id`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`payee_id`) REFERENCES `payees`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE INDEX IF NOT EXISTS `index_recurring_schedules_account_id` ON `recurring_schedules` (`account_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_recurring_schedules_to_account_id` ON `recurring_schedules` (`to_account_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_recurring_schedules_category_id` ON `recurring_schedules` (`category_id`)",
+                "CREATE INDEX IF NOT EXISTS `index_recurring_schedules_payee_id` ON `recurring_schedules` (`payee_id`)",
+                "CREATE TABLE IF NOT EXISTS `recurring_occurrences` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `schedule_id` INTEGER NOT NULL, `due_date` INTEGER NOT NULL, `transaction_id` INTEGER, `skipped` INTEGER NOT NULL, `reminder_sent` INTEGER NOT NULL, `overdue_sent` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, FOREIGN KEY(`schedule_id`) REFERENCES `recurring_schedules`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`transaction_id`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_recurring_occurrences_schedule_id_due_date` ON `recurring_occurrences` (`schedule_id`, `due_date`)",
+                "CREATE INDEX IF NOT EXISTS `index_recurring_occurrences_transaction_id` ON `recurring_occurrences` (`transaction_id`)",
+            ).forEach(db::execSQL)
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 }

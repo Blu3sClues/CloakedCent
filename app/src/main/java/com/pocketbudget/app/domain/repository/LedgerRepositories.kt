@@ -83,8 +83,10 @@ interface TransactionRepository {
     /**
      * SCHEDULED -> the type's completed status (Received / Spent / Completed), both
      * legs atomically for transfers. Returns false if not scheduled, so repeats are harmless.
+     * [actualAmount] (positive) replaces the projected amount in the same atomic step,
+     * for variable bills; the original value stays in the audit history.
      */
-    suspend fun confirm(id: Long): Boolean
+    suspend fun confirm(id: Long, actualAmount: Money? = null): Boolean
 
     /** Records a balance correction as a new ledger entry; idempotent on requestId. Returns the entry id. */
     suspend fun adjustBalance(adjustment: NewAdjustment): Long

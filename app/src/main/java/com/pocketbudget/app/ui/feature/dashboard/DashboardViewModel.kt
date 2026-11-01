@@ -26,7 +26,13 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.time.Clock
+import java.time.LocalDate
 import java.time.YearMonth
+import com.pocketbudget.app.domain.model.BudgetProgress
+import com.pocketbudget.app.domain.model.BudgetState
+import com.pocketbudget.app.domain.model.TransactionFilter
+import com.pocketbudget.app.domain.repository.BudgetRepository
+import kotlinx.coroutines.flow.flowOf
 
 sealed interface DashboardUiState {
     data object Loading : DashboardUiState
@@ -38,6 +44,10 @@ sealed interface DashboardUiState {
         val thisMonth: PeriodSummary,
         val recent: List<TransactionListItem>,
         val canLoadSampleData: Boolean,
+        /** Active budgets for the overview (parents first). */
+        val budgets: List<BudgetProgress> = emptyList(),
+        /** Scheduled entries dated before today. */
+        val overdueCount: Int = 0,
     ) : DashboardUiState
 }
 
@@ -47,6 +57,7 @@ class DashboardViewModel(
     private val transactionRepository: TransactionRepository,
     private val clock: Clock = Clock.systemDefaultZone(),
     private val sampleSeeder: (suspend () -> Unit)? = null,
+    private val budgetRepository: BudgetRepository? = null,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Loading)
@@ -88,7 +99,9 @@ class DashboardViewModel(
                 accountRepository.observeBalances(),
                 transactionRepository.observePeriodSummary(month.atDay(1), month.atEndOfMonth()),
                 transactionRepository.observeRecent(RECENT_LIMIT),
-            ) { accounts, summary, recent ->
+                budgetRepository?.observeProgress(LocalDate.now(clock)) ?: flowOf(emptyList()),
+                transactionRepository.search(TransactionFilter(scheduled = true)),
+            ) { accounts, summary, recent, budgets, scheduled ->
                 DashboardUiState.Ready(
                     storage = storage,
                     totals = accounts.consolidated(),
@@ -96,6 +109,8 @@ class DashboardViewModel(
                     thisMonth = summary,
                     recent = recent,
                     canLoadSampleData = sampleSeeder != null && accounts.isEmpty(),
+                    budgets = budgets.filter { it.budget.state == BudgetState.ACTIVE },
+                    overdueCount = scheduled.count { it.occurredOn.isBefore(LocalDate.now(clock)) },
                 )
             }
                 .catch { _uiState.value = DashboardUiState.Error(Reason.UNKNOWN) }
@@ -114,6 +129,7 @@ class DashboardViewModel(
                     accountRepository = container.accountRepository,
                     transactionRepository = container.transactionRepository,
                     sampleSeeder = container.sampleSeeder,
+                    budgetRepository = container.budgetRepository,
                 )
             }
         }

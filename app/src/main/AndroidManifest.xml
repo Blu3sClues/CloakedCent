@@ -13,6 +13,9 @@
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
 
+    <!-- Local reminders for upcoming payments and budget alerts (requested in context on Android 13+). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!--
         allowBackup / fullBackupContent / dataExtractionRules keep financial
         data, receipts and the wrapped database key out of Google cloud backup
