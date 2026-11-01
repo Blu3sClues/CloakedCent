@@ -43,12 +43,14 @@ object PocketBudgetDatabaseFactory {
                 "INSERT INTO app_metadata (meta_key, meta_value) VALUES (?, ?)",
                 arrayOf(AppMetadataKeys.CREATED_AT, clock.millis().toString()),
             )
+            LedgerSchema.seedDefaultCategories(db, clock.millis())
         }
 
         override fun onOpen(db: SupportSQLiteDatabase) {
             // SQLite leaves foreign key enforcement off by default; financial
             // records rely on it, so force it on for every open.
             db.execSQL("PRAGMA foreign_keys = ON")
+            LedgerSchema.createTriggers(db)
         }
     }
 }

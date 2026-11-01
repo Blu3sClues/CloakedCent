@@ -1,11 +1,17 @@
 package com.pocketbudget.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
 private val LightColors = lightColorScheme(
     primary = AquaPrimary,
@@ -67,6 +73,26 @@ private val DarkColors = darkColorScheme(
     onErrorContainer = DarkOnErrorContainer,
 )
 
+/** Financial meaning colors that Material's scheme does not cover. */
+@Immutable
+data class LedgerColors(val income: Color, val expense: Color, val scheduled: Color)
+
+private val LightLedgerColors = LedgerColors(income = IncomeLight, expense = LightError, scheduled = AquaTertiary)
+private val DarkLedgerColors = LedgerColors(income = IncomeDark, expense = DarkError, scheduled = MidnightTertiary)
+
+private val LocalLedgerColors = staticCompositionLocalOf { LightLedgerColors }
+
+private val PocketBudgetShapes = Shapes(
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(24.dp),
+)
+
+object PocketBudgetTheme {
+    val ledgerColors: LedgerColors
+        @Composable get() = LocalLedgerColors.current
+}
+
 /**
  * Pocket Budget brand theme. Dynamic (wallpaper) color is intentionally not
  * used so the aqua / midnight identity is consistent on every device.
@@ -76,9 +102,12 @@ fun PocketBudgetTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = Typography(),
-        content = content,
-    )
+    CompositionLocalProvider(LocalLedgerColors provides if (darkTheme) DarkLedgerColors else LightLedgerColors) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = PocketBudgetTypography,
+            shapes = PocketBudgetShapes,
+            content = content,
+        )
+    }
 }

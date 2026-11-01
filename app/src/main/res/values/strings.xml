@@ -1,20 +1,42 @@
 <resources>
     <string name="app_name">Pocket Budget</string>
 
-    <string name="home_welcome_title">Your budget, on your device</string>
-    <string name="home_welcome_body">Pocket Budget works completely offline. Your financial records never leave this phone.</string>
-
-    <string name="home_storage_title">Private storage</string>
-    <string name="home_storage_encrypted">Database encrypted with SQLCipher (%1$s)</string>
-    <string name="home_storage_key">Encryption key protected by Android Keystore</string>
-    <string name="home_storage_offline">No internet permission, no accounts, no tracking</string>
-    <string name="home_storage_created">Created %1$s</string>
     <string name="home_storage_loading">Opening encrypted storage…</string>
-
     <string name="home_error_title">Your data could not be opened</string>
     <string name="home_error_key_missing">The encryption key for your existing data is missing. Your data has not been deleted.</string>
     <string name="home_error_key_corrupted">The stored encryption key is damaged. Your data has not been deleted.</string>
     <string name="home_error_keystore">Android Keystore is unavailable right now. Your data has not been deleted.</string>
     <string name="home_error_unknown">An unexpected storage error occurred. Your data has not been deleted.</string>
     <string name="home_error_retry">Try again</string>
+
+    <string name="dashboard_total_balance">Total balance</string>
+    <string name="dashboard_income_month">Income this month</string>
+    <string name="dashboard_spent_month">Spent this month</string>
+    <string name="dashboard_accounts">Accounts</string>
+    <string name="dashboard_recent">Recent activity</string>
+    <string name="dashboard_no_accounts_title">No accounts yet</string>
+    <string name="dashboard_no_accounts_body">Accounts and transactions you add will appear here. Everything stays encrypted on this device.</string>
+    <string name="dashboard_load_sample">Load sample data</string>
+    <string name="dashboard_no_activity_title">No activity yet</string>
+    <string name="dashboard_no_activity_body">Recorded income, expenses and transfers will appear here.</string>
+    <string name="dashboard_storage_footer">Encrypted on this device with SQLCipher %1$s · Offline</string>
+
+    <string name="balance_cleared">Cleared</string>
+    <string name="balance_projected">Projected</string>
+
+    <string name="status_scheduled">Scheduled</string>
+    <string name="status_pending">Pending</string>
+    <string name="status_cleared">Cleared</string>
+
+    <string name="type_income">Income</string>
+    <string name="type_expense">Expense</string>
+    <string name="transfer_to">Transfer to %1$s</string>
+
+    <string name="account_type_checking">Checking</string>
+    <string name="account_type_savings">Savings</string>
+    <string name="account_type_cash">Cash</string>
+    <string name="account_type_credit_card">Credit card</string>
+    <string name="account_type_loan">Loan</string>
+    <string name="account_type_investment">Investment</string>
+    <string name="account_type_other">Other</string>
 </resources>

@@ -1,0 +1,73 @@
+package com.pocketbudget.app.domain.repository
+
+import com.pocketbudget.app.core.money.Money
+import com.pocketbudget.app.domain.model.AccountBalance
+import com.pocketbudget.app.domain.model.AccountType
+import com.pocketbudget.app.domain.model.Category
+import com.pocketbudget.app.domain.model.CategoryKind
+import com.pocketbudget.app.domain.model.NewTransaction
+import com.pocketbudget.app.domain.model.NewTransfer
+import com.pocketbudget.app.domain.model.PayeeType
+import com.pocketbudget.app.domain.model.PeriodSummary
+import com.pocketbudget.app.domain.model.TransactionEdit
+import com.pocketbudget.app.domain.model.TransactionListItem
+import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
+
+// All write methods throw LedgerException for rule violations and are atomic:
+// either every affected row is written or none is.
+
+interface AccountRepository {
+    suspend fun create(
+        name: String,
+        type: AccountType,
+        openingBalance: Money = Money.ZERO,
+        includeInTotals: Boolean = true,
+    ): Long
+
+    /** Hides an account. Only allowed when its projected balance is zero, so totals stay truthful. */
+    suspend fun archive(id: Long)
+
+    /** Active accounts with balances, updated whenever the ledger changes. */
+    fun observeBalances(): Flow<List<AccountBalance>>
+}
+
+interface CategoryRepository {
+    /** [parentId] nests the category; the parent must have the same [kind]. */
+    suspend fun create(name: String, kind: CategoryKind, parentId: Long? = null): Long
+
+    /** Re-parents a category, rejecting cycles and kind mismatches. */
+    suspend fun setParent(id: Long, parentId: Long?)
+
+    fun observeAll(): Flow<List<Category>>
+}
+
+interface PayeeRepository {
+    /** Returns the existing payee with this name (case-insensitive) or creates it. */
+    suspend fun getOrCreate(name: String, type: PayeeType = PayeeType.MERCHANT): Long
+}
+
+interface TransactionRepository {
+    /** Records income or expense; idempotent on [NewTransaction.requestId]. Returns the entry id. */
+    suspend fun record(transaction: NewTransaction): Long
+
+    /** Records both legs of a transfer atomically; idempotent on requestId. Returns the transfer id. */
+    suspend fun recordTransfer(transfer: NewTransfer): Long
+
+    /** Edits an entry (both legs for transfers), keeping the previous values as a revision. */
+    suspend fun edit(id: Long, edit: TransactionEdit)
+
+    /** Soft-deletes an entry (both legs for transfers), keeping it in history. */
+    suspend fun delete(id: Long)
+
+    /** SCHEDULED -> PENDING. Returns false if already processed, so repeats are harmless. */
+    suspend fun confirm(id: Long): Boolean
+
+    /** PENDING -> CLEARED. Returns false if not pending. */
+    suspend fun markCleared(id: Long): Boolean
+
+    /** Most recent entries; transfers appear once (outgoing leg). */
+    fun observeRecent(limit: Int): Flow<List<TransactionListItem>>
+
+    fun observePeriodSummary(start: LocalDate, endInclusive: LocalDate): Flow<PeriodSummary>
+}

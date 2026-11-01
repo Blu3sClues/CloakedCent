@@ -27,6 +27,10 @@ internal val LightError = Color(0xFFBA1A1A)
 internal val LightErrorContainer = Color(0xFFFFDAD6)
 internal val LightOnErrorContainer = Color(0xFF410002)
 
+// Income green, chosen for >= 4.5:1 contrast on the respective backgrounds.
+internal val IncomeLight = Color(0xFF1B6C3A)
+internal val IncomeDark = Color(0xFF7FD99A)
+
 // Dark: midnight blue background, dark grey surfaces, soft aqua accents.
 internal val MidnightPrimary = Color(0xFF7DD3E8)
 internal val MidnightOnPrimary = Color(0xFF00363F)

@@ -55,6 +55,39 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate1To2CreatesLedgerAndKeepsExistingData() {
+        helper.createDatabase(TEST_DB, 1).apply {
+            execSQL(
+                "INSERT INTO app_metadata (meta_key, meta_value) VALUES (?, ?)",
+                arrayOf<Any>(AppMetadataKeys.CREATED_AT, "1700000000000"),
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 2, true, Migrations.MIGRATION_1_2)
+
+        db.query("SELECT meta_value FROM app_metadata").use {
+            it.moveToFirst()
+            assertEquals("1700000000000", it.getString(0))
+        }
+        db.query(
+            """
+            SELECT parent.name FROM categories child
+            JOIN categories parent ON parent.id = child.parent_id
+            WHERE child.name = 'Groceries'
+            """,
+        ).use {
+            it.moveToFirst()
+            assertEquals("Food", it.getString(0))
+        }
+        db.query("SELECT COUNT(*) FROM categories").use {
+            it.moveToFirst()
+            assertEquals(11, it.getInt(0))
+        }
+        db.close()
+    }
+
+    @Test
     fun migrateFromFirstVersionToLatest() = runTest {
         helper.createDatabase(TEST_DB, FIRST_VERSION).apply {
             execSQL(

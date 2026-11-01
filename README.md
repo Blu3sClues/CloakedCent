@@ -159,11 +159,40 @@ The `app_metadata` table is reserved for backup and installation metadata.
   is strict and never goes through floating point.
 - **Foreign keys** are enabled on every connection (`PRAGMA foreign_keys = ON`,
   verified by test).
-- **Scheduled vs. confirmed transactions** (transaction engine stage):
-  recurring and scheduled payments are stored as *projected* entries with an
-  explicit status. They are never shown as, or counted as, cleared bank
-  activity. A projected entry becomes confirmed only through an explicit user
-  action, and balances will distinguish "current" from "projected".
+
+### Ledger model (schema v2)
+
+| Table | Purpose |
+|---|---|
+| `accounts` | Financial accounts with an opening balance (cents). Archived, never deleted. |
+| `categories` | Income/expense categories; `parent_id` nests them (same kind, no cycles). |
+| `payees` | People and merchants, unique by name (case-insensitive lookup). |
+| `transfers` | Groups the two legs of a transfer between different accounts. |
+| `transactions` | The ledger. One signed entry per account: income `> 0`, expense `< 0`, transfers as two legs. |
+| `transaction_revisions` | Immutable snapshot written before every edit, status change or delete. |
+
+Income and expenses are entry *types* in one ledger rather than separate tables,
+so every balance comes from a single source and nothing can be double counted.
+
+- **Status:** `SCHEDULED` (projected, money has not moved) → `PENDING`
+  (confirmed) → `CLEARED` (matches the bank). Balances are reported as
+  *current* (pending + cleared), *cleared*, and *projected* (current + scheduled).
+  Scheduled entries never appear in current balances or monthly income/spending.
+- **Transfers** are never counted as income or expense.
+- **No duplicate processing:** every income, expense and transfer carries a
+  unique `request_id`. Repeating a request returns the original record, and
+  status changes apply exactly once.
+- **Atomic writes:** each repository operation runs in one database
+  transaction. A transfer writes both legs or nothing.
+- **History:** transactions are soft-deleted only (`is_deleted`), and prior
+  values are kept in `transaction_revisions`.
+- **Database triggers** (`LedgerSchema`) enforce amount signs, valid statuses,
+  transfer consistency, distinct transfer accounts, no hard deletes and
+  immutable revisions, even if repository code is bypassed.
+- **Accounts** can be archived only at a zero projected balance, so totals stay truthful.
+- **Single currency for now:** all accounts share the device locale's currency.
+- **Sample data:** debug builds offer "Load sample data" on an empty ledger.
+  The code lives in `src/debug` and is absent from release builds.
 
 ---
 
