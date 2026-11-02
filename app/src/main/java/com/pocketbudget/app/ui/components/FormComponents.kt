@@ -140,12 +140,15 @@ fun ledgerErrorMessage(error: Throwable): Int = when (error) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BackTopBar(title: String, onBack: () -> Unit, actions: @Composable () -> Unit = {}) {
+fun BackTopBar(title: String, onBack: (() -> Unit)?, actions: @Composable () -> Unit = {}) {
     TopAppBar(
         title = { Text(title) },
         navigationIcon = {
-            IconButton(onClick = onBack) {
-                Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
+            // Top-level destinations reached from the navigation bar have no back arrow.
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
+                }
             }
         },
         actions = { actions() },

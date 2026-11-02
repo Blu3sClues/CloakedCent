@@ -138,7 +138,7 @@ class BudgetsViewModel(
 
 @Composable
 fun BudgetsRoute(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onOpen: (Long) -> Unit,
     onAdd: () -> Unit,
     viewModel: BudgetsViewModel = viewModel(factory = BudgetsViewModel.Factory),
@@ -148,7 +148,7 @@ fun BudgetsRoute(
 }
 
 @Composable
-fun BudgetsScreen(progress: List<BudgetProgress>?, onBack: () -> Unit, onOpen: (Long) -> Unit, onAdd: () -> Unit) {
+fun BudgetsScreen(progress: List<BudgetProgress>?, onBack: (() -> Unit)?, onOpen: (Long) -> Unit, onAdd: () -> Unit) {
     Scaffold(
         topBar = { BackTopBar(stringResource(R.string.budgets_title), onBack) },
         floatingActionButton = {

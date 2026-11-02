@@ -93,7 +93,7 @@ class ReceiptsViewModel(receipts: ReceiptRepository) : ViewModel() {
 
 @Composable
 fun ReceiptsRoute(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onScan: () -> Unit,
     onOpen: (Long) -> Unit,
     onProducts: () -> Unit,

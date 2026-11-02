@@ -432,3 +432,12 @@ how they constrain each other. In short:
 - New releases are adopted only after they have been out for at least two weeks.
 
 Change versions as a set, then run unit tests, instrumented tests and lint.
+
+### Open-source acknowledgements
+
+Settings → About & privacy shows the encryption status and opens
+**Open-source licences**. That screen lists every bundled component (including
+native libraries packaged inside SQLCipher, Tesseract4Android and CameraX) and shows
+its full licence text, stored in `app/src/main/res/raw/license_*.txt`. The list is
+`ACKNOWLEDGEMENTS` in `ui/feature/settings/Acknowledgements.kt`. When you add,
+remove or upgrade a dependency, update that list and its licence text as well.

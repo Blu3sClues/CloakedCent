@@ -147,7 +147,7 @@ class RecurringViewModel(
 
 @Composable
 fun RecurringListRoute(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onOpen: (Long) -> Unit,
     onAdd: () -> Unit,
     onUpcoming: () -> Unit,

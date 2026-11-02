@@ -19,7 +19,6 @@
     <string name="dashboard_load_sample">Load sample data</string>
     <string name="dashboard_no_activity_title">No activity yet</string>
     <string name="dashboard_no_activity_body">Recorded income, expenses and transfers will appear here.</string>
-    <string name="dashboard_storage_footer">Encrypted on this device with SQLCipher %1$s · Offline</string>
 
     <string name="balance_projected">Projected</string>
     <string name="balance_projected_with_scheduled">Projected after scheduled</string>
@@ -535,4 +534,13 @@
         <item quantity="one">At least %1$d character. A longer passphrase is stronger.</item>
         <item quantity="other">At least %1$d characters. A longer passphrase is stronger.</item>
     </plurals>
+    <string name="settings_about">About &amp; privacy</string>
+    <string name="settings_storage_encrypted">Encrypted on this device with SQLCipher %1$s · Offline</string>
+    <string name="settings_storage_checking">Checking encrypted storage…</string>
+    <string name="settings_privacy_body">Pocket Budget has no internet access. Your data, receipts and backups stay on this device unless you export them.</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_licences">Open-source licences</string>
+    <string name="acknowledgements_title">Open-source licences</string>
+    <string name="nav_home">Home</string>
+    <string name="acknowledgements_intro">Pocket Budget is built with the following open-source software. Tap an entry to read its licence.</string>
 </resources>

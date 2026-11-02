@@ -120,7 +120,7 @@ fun AnalysisRoute(nav: AnalysisNavigation, viewModel: AnalysisViewModel = viewMo
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf(R.string.analysis_tab_overview, R.string.analysis_tab_categories, R.string.analysis_tab_stores, R.string.analysis_tab_products)
 
-    Scaffold(topBar = { BackTopBar(stringResource(R.string.analysis_title), nav.onBack) }) { padding ->
+    Scaffold(topBar = { BackTopBar(stringResource(R.string.analysis_title), onBack = null) }) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 24.dp),

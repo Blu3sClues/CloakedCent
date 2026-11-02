@@ -1,12 +1,10 @@
 package com.pocketbudget.app.ui.feature.dashboard
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -76,10 +74,7 @@ class DashboardActions(
     val onOpenHistory: () -> Unit = {},
     val onOpenSettings: () -> Unit = {},
     val onOpenBudgets: () -> Unit = {},
-    val onOpenRecurring: () -> Unit = {},
     val onOpenUpcoming: () -> Unit = {},
-    val onOpenReceipts: () -> Unit = {},
-    val onOpenAnalysis: () -> Unit = {},
 )
 
 @Composable
@@ -91,10 +86,7 @@ fun DashboardRoute(
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenBudgets: () -> Unit,
-    onOpenRecurring: () -> Unit,
     onOpenUpcoming: () -> Unit,
-    onOpenReceipts: () -> Unit,
-    onOpenAnalysis: () -> Unit,
     viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -110,10 +102,7 @@ fun DashboardRoute(
             onOpenHistory = onOpenHistory,
             onOpenSettings = onOpenSettings,
             onOpenBudgets = onOpenBudgets,
-            onOpenRecurring = onOpenRecurring,
             onOpenUpcoming = onOpenUpcoming,
-            onOpenReceipts = onOpenReceipts,
-            onOpenAnalysis = onOpenAnalysis,
         ),
     )
 }
@@ -169,27 +158,22 @@ fun DashboardScreen(uiState: DashboardUiState, actions: DashboardActions) {
 
 private const val DASHBOARD_BUDGETS = 3
 
+/** Main sections live in the navigation bar; only overdue payments are surfaced here. */
 @Composable
-private fun PlanningShortcuts(overdueCount: Int, actions: DashboardActions) {
-    // Scrolls sideways on narrow screens instead of squeezing the labels.
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        AssistChip(onClick = actions.onOpenAnalysis, label = { Text(stringResource(R.string.analysis_tab_overview_short)) })
-        AssistChip(
-            onClick = actions.onOpenReceipts,
-            label = { Text(stringResource(R.string.receipts_title)) },
-            leadingIcon = { Icon(painterResource(R.drawable.ic_receipt), null) },
-        )
-        AssistChip(onClick = actions.onOpenBudgets, label = { Text(stringResource(R.string.budgets_title)) })
-        AssistChip(onClick = actions.onOpenRecurring, label = { Text(stringResource(R.string.recurring_title)) })
-        AssistChip(
-            onClick = actions.onOpenUpcoming,
-            label = {
-                Text(
-                    if (overdueCount > 0) stringResource(R.string.upcoming_with_overdue, overdueCount) else stringResource(R.string.upcoming_title),
-                    color = if (overdueCount > 0) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified,
-                )
-            },
-        )
+private fun OverdueNotice(overdueCount: Int, onOpenUpcoming: () -> Unit) {
+    Card(
+        onClick = onOpenUpcoming,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_calendar), contentDescription = null)
+            Spacer(Modifier.width(12.dp))
+            Text(stringResource(R.string.upcoming_with_overdue, overdueCount), style = MaterialTheme.typography.titleSmall)
+        }
     }
 }
 
@@ -217,7 +201,7 @@ private fun AddMenuButton(onAdd: (TransactionType) -> Unit) {
 @Composable
 private fun ReadyContent(state: DashboardUiState.Ready, actions: DashboardActions) {
     BalanceHeroCard(state.totals, state.thisMonth)
-    PlanningShortcuts(state.overdueCount, actions)
+    if (state.overdueCount > 0) OverdueNotice(state.overdueCount, actions.onOpenUpcoming)
     if (state.budgets.isNotEmpty()) {
         SectionHeader(
             stringResource(R.string.budgets_title),
@@ -258,8 +242,6 @@ private fun ReadyContent(state: DashboardUiState.Ready, actions: DashboardAction
     } else {
         ListCard(state.recent) { TransactionRow(it, Modifier.clickable { actions.onOpenTransaction(it.id) }) }
     }
-
-    StorageFooter(state.storage)
 }
 
 @Composable
@@ -298,27 +280,6 @@ private fun LabeledAmount(label: String, amount: Money) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("$label ", style = MaterialTheme.typography.bodySmall)
         MoneyText(amount, style = MoneyTextStyles.caption)
-    }
-}
-
-@Composable
-private fun StorageFooter(storage: StorageStatus) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            painterResource(R.drawable.ic_lock),
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = stringResource(R.string.dashboard_storage_footer, storage.cipherVersion),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
