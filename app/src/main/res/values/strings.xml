@@ -267,6 +267,13 @@
     <string name="upcoming_state_overdue">Overdue</string>
     <string name="upcoming_state_projected">Projected</string>
     <string name="upcoming_note">Recurring items become scheduled transactions 14 days before they are due. Tap one to confirm it.</string>
+    <string name="upcoming_nothing_on_day">Nothing scheduled on this day.</string>
+    <string name="upcoming_previous_month">Previous month</string>
+    <string name="upcoming_next_month">Next month</string>
+    <plurals name="upcoming_day_count">
+        <item quantity="one">%1$d scheduled item</item>
+        <item quantity="other">%1$d scheduled items</item>
+    </plurals>
 
     <!-- Receipts (Stage 6) -->
     <string name="receipts_title">Receipts</string>

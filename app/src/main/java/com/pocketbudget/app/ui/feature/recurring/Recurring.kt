@@ -32,9 +32,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -91,6 +94,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Clock
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
@@ -319,27 +323,92 @@ class UpcomingViewModel(recurring: RecurringRepository, clock: Clock = Clock.sys
 @Composable
 fun UpcomingRoute(onBack: () -> Unit, onOpenTransaction: (Long) -> Unit, viewModel: UpcomingViewModel = viewModel(factory = UpcomingViewModel.Factory)) {
     val items by viewModel.items.collectAsStateWithLifecycle()
-    UpcomingScreen(items, onBack, onOpenTransaction)
+    UpcomingScreen(items, onBack, onOpenTransaction, viewModel.today)
 }
 
+/**
+ * A month calendar marking days with scheduled or projected items; the list below shows
+ * only the selected day. Months can be browsed from the oldest overdue item to the end
+ * of the projection window.
+ */
 @Composable
-fun UpcomingScreen(items: List<UpcomingItem>?, onBack: () -> Unit, onOpenTransaction: (Long) -> Unit) {
+fun UpcomingScreen(
+    items: List<UpcomingItem>?,
+    onBack: () -> Unit,
+    onOpenTransaction: (Long) -> Unit,
+    today: LocalDate = LocalDate.now(),
+) {
+    var selectedDay by rememberSaveable { mutableLongStateOf(today.toEpochDay()) }
+    val selected = LocalDate.ofEpochDay(selectedDay)
+    var shownMonth by rememberSaveable { mutableIntStateOf(monthIndex(YearMonth.from(today))) }
+    val month = YearMonth.of(shownMonth / 12, shownMonth % 12 + 1)
+
+    val all = items.orEmpty()
+    val markers = remember(all) {
+        all.groupBy { it.date }.mapValues { (_, group) -> DayMarker(group.size, group.any { it.overdue }) }
+    }
+    val firstMonth = monthIndex(YearMonth.from(minOf(today, all.minOfOrNull { it.date } ?: today)))
+    val lastMonth = monthIndex(YearMonth.from(today.plusDays(UpcomingViewModel.UPCOMING_DAYS.toLong())))
+    val overdue = all.filter { it.overdue }
+    val select = { date: LocalDate ->
+        selectedDay = date.toEpochDay()
+        shownMonth = monthIndex(YearMonth.from(date))
+    }
+
     Scaffold(topBar = { BackTopBar(stringResource(R.string.upcoming_title), onBack) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (items?.isEmpty() == true) {
-                item { EmptyState(stringResource(R.string.upcoming_empty_title), stringResource(R.string.upcoming_empty_body)) }
+            item {
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                    MonthCalendar(
+                        month = month,
+                        selected = selected,
+                        today = today,
+                        markers = markers,
+                        onSelect = { selectedDay = it.toEpochDay() },
+                        onPreviousMonth = { shownMonth -= 1 }.takeIf { shownMonth > firstMonth },
+                        onNextMonth = { shownMonth += 1 }.takeIf { shownMonth < lastMonth },
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
             }
-            val (overdue, coming) = items.orEmpty().partition { it.overdue }
-            if (overdue.isNotEmpty()) item { SectionHeader(stringResource(R.string.upcoming_overdue, overdue.size)) }
-            items(overdue) { UpcomingRow(it, onOpenTransaction) }
-            coming.groupBy { it.date }.forEach { (date, group) ->
-                item { SectionHeader(date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL))) }
-                items(group) { UpcomingRow(it, onOpenTransaction) }
+            if (overdue.isNotEmpty()) {
+                item {
+                    // Overdue items sit on past days; this jumps to the oldest one.
+                    Card(
+                        onClick = { select(overdue.minOf { it.date }) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    ) {
+                        Text(
+                            stringResource(R.string.upcoming_overdue, overdue.size),
+                            Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                    }
+                }
+            }
+            if (items?.isEmpty() == true) {
+                item { EmptyState(stringResource(R.string.upcoming_empty_title), stringResource(R.string.upcoming_empty_body), Modifier.padding(top = 8.dp)) }
+            } else if (items != null) {
+                val onDay = all.filter { it.date == selected }
+                item { SectionHeader(selected.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL))) }
+                if (onDay.isEmpty()) {
+                    item {
+                        Text(
+                            stringResource(R.string.upcoming_nothing_on_day),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                items(onDay) { UpcomingRow(it, onOpenTransaction) }
             }
             item { Text(stringResource(R.string.upcoming_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp)) }
         }
     }
 }
+
+private fun monthIndex(month: YearMonth) = month.year * 12 + month.monthValue - 1
 
 @Composable
 private fun UpcomingRow(item: UpcomingItem, onOpenTransaction: (Long) -> Unit) {
