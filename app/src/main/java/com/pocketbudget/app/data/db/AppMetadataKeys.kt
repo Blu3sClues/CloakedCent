@@ -11,4 +11,7 @@ object AppMetadataKeys {
      * already-encrypted image files.
      */
     const val MEDIA_KEY = "receipt_media_key_v1"
+
+    /** Present when a migration erased data and the file should be rewritten by VACUUM on open. */
+    const val VACUUM_PENDING = "vacuum_pending"
 }

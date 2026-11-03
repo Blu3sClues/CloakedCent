@@ -3,6 +3,7 @@ package com.pocketbudget.app.data.repository
 import androidx.room.withTransaction
 import com.pocketbudget.app.core.money.Money
 import com.pocketbudget.app.data.db.PocketBudgetDatabase
+import com.pocketbudget.app.data.db.SecureErase
 import com.pocketbudget.app.data.db.dao.AccountBalanceRow
 import com.pocketbudget.app.data.db.dao.TransactionListRow
 import com.pocketbudget.app.data.db.entity.AccountEntity
@@ -60,6 +61,20 @@ abstract class RoomRepository(
             val db = database()
             db.withTransaction { block(db) }
         }
+
+    /**
+     * A write that permanently erases data (see Erasure): deleted content is zeroed as it
+     * is removed, and after the commit the write-ahead log is truncated so it keeps no
+     * old copies of the erased pages.
+     */
+    protected suspend fun <T> erase(block: suspend (PocketBudgetDatabase) -> T): T {
+        val result = write { db ->
+            SecureErase.enableSecureDelete(db.openHelper.writableDatabase)
+            block(db)
+        }
+        withContext(ioDispatcher) { SecureErase.truncateWal(database().openHelper.writableDatabase) }
+        return result
+    }
 
     protected suspend fun <T> withContextRead(block: suspend (PocketBudgetDatabase) -> T): T =
         withContext(ioDispatcher) { block(database()) }
@@ -317,14 +332,8 @@ class RoomTransactionRepository(
         }
     }
 
-    override suspend fun delete(id: Long) = write { db ->
-        val current = db.transactionDao().getById(id) ?: throw LedgerException.NotFound("Transaction $id")
-        if (current.type == TransactionType.EXPENSE && !current.isDeleted && db.refundDao().refundedTotal(id) > 0) {
-            throw LedgerException.InvalidOperation("Delete this expense's refunds first")
-        }
-        for (entry in legsOf(db, current)) {
-            if (!entry.isDeleted) applyChange(db, entry, entry.copy(isDeleted = true), RevisionAction.DELETE)
-        }
+    override suspend fun delete(id: Long) {
+        erase { db -> Erasure.transaction(db, id, clock.millis()) }
     }
 
     override suspend fun confirm(id: Long, actualAmount: Money?): Boolean = write { db ->

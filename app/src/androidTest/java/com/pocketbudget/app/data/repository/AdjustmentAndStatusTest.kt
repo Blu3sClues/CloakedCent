@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -107,15 +108,18 @@ class AdjustmentAndStatusTest {
         // The opening balance itself is never rewritten.
         assertEquals(1_000L, t.db.accountDao().getById(a)!!.openingBalanceCents)
 
-        // Editing keeps the direction and records history; deleting is soft.
+        // Editing keeps the direction and records history until it is deleted.
         t.ledger.edit(first, TransactionEdit(Money(500), today, note = "recount"))
         assertEquals(Money(500), balance(a).current)
+        val edited = t.ledger.observeDetail(first).first()!!
+        assertTrue(edited.isAdjustment)
+        assertEquals(listOf(RevisionAction.UPDATE), edited.history.map { it.action })
+        assertEquals(Money(-300), edited.history.first().amount)
+        // Deleting erases it and its history; the opening balance is untouched.
         t.ledger.delete(first)
         assertEquals(Money(1_000), balance(a).current)
-        val detail = t.ledger.observeDetail(first).first()!!
-        assertTrue(detail.isAdjustment && detail.isDeleted)
-        assertEquals(listOf(RevisionAction.UPDATE, RevisionAction.DELETE), detail.history.map { it.action })
-        assertEquals(Money(-300), detail.history.first().amount)
+        assertNull(t.ledger.observeDetail(first).first())
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM transaction_revisions WHERE transaction_id = $first"))
     }
 
     @Test

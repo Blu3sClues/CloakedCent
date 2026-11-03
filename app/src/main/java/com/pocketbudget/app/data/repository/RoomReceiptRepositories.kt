@@ -229,8 +229,8 @@ class RoomReceiptRepository(
     }
 
     override fun observeDetail(id: Long): Flow<ReceiptDetail?> = observe { db ->
-        db.receiptDao().observeBundle(id).combine(db.receiptDao().observeExpenseDeleted(id)) { bundle, expenseDeleted ->
-            bundle ?: return@combine null
+        db.receiptDao().observeBundle(id).map { bundle ->
+            bundle ?: return@map null
             val receipt = bundle.receipt
             val items = bundle.items.sortedBy { it.position }
             val pages = bundle.images.sortedBy { it.page }
@@ -260,7 +260,8 @@ class RoomReceiptRepository(
                 transactionId = receipt.transactionId,
                 storeId = receipt.storeId,
                 ocrError = receipt.ocrError,
-                expenseDeleted = expenseDeleted,
+                // A confirmed receipt always had an expense; none now means it was deleted.
+                expenseDeleted = receipt.status == ReceiptStatus.CONFIRMED && receipt.transactionId == null,
             )
         }
     }
@@ -324,7 +325,12 @@ class RoomReceiptRepository(
     }
 
     override suspend fun confirm(id: Long, review: ReceiptReview, target: ConfirmTarget, keepImages: Boolean): Long {
-        val (transactionId, files) = confirmInTransaction(id, review, target, keepImages)
+        // Dropping the images erases their records, so that path scrubs like any deletion.
+        val (transactionId, files) = if (keepImages) {
+            write { db -> confirmInTransaction(db, id, review, target, keepImages = true) }
+        } else {
+            erase { db -> confirmInTransaction(db, id, review, target, keepImages = false) }
+        }
         // After the commit; if this is interrupted, orphan cleanup removes them.
         withContext(ioDispatcher) { files.forEach(images::delete) }
         return transactionId
@@ -332,14 +338,19 @@ class RoomReceiptRepository(
 
     /** Returns the expense id and the image files to delete once committed. */
     private suspend fun confirmInTransaction(
+        db: PocketBudgetDatabase,
         id: Long,
         review: ReceiptReview,
         target: ConfirmTarget,
         keepImages: Boolean,
-    ): Pair<Long, List<String>> = write { db ->
+    ): Pair<Long, List<String>> {
         val dao = db.receiptDao()
         val receipt = dao.getById(id) ?: throw ReceiptException.NotFound()
-        if (receipt.status == ReceiptStatus.CONFIRMED) return@write receipt.transactionId!! to emptyList()
+        if (receipt.status == ReceiptStatus.CONFIRMED) {
+            // Its expense was deleted; the receipt is final and cannot take another.
+            val expense = receipt.transactionId ?: throw ReceiptException.NotEditable()
+            return expense to emptyList()
+        }
         if (!receipt.isEditable) throw ReceiptException.NotEditable()
         validateForConfirm(db, review)
         val total = review.total!!
@@ -419,7 +430,7 @@ class RoomReceiptRepository(
         )
         val imageFiles = if (keepImages) emptyList() else dao.getImages(id).map { it.fileName }
         if (!keepImages) dao.deleteImages(id)
-        transactionId to imageFiles
+        return transactionId to imageFiles
     }
 
     /** Links to an existing expense without ever creating another one. */
@@ -552,36 +563,26 @@ class RoomReceiptRepository(
     }
 
     override suspend fun discard(id: Long) {
-        val files = write { db ->
-            val dao = db.receiptDao()
-            val receipt = dao.getById(id) ?: throw ReceiptException.NotFound()
-            if (receipt.status == ReceiptStatus.DISCARDED) return@write emptyList()
+        val files = erase { db ->
+            // Already erased: nothing left to do.
+            val receipt = db.receiptDao().getById(id) ?: return@erase emptyList()
             if (!receipt.isEditable) throw ReceiptException.NotEditable()
-            val imageFiles = dao.getImages(id).map { it.fileName }
-            dao.deleteItems(id)
-            dao.deleteOcrLines(id)
-            dao.deleteImages(id)
-            dao.update(receipt.copy(status = ReceiptStatus.DISCARDED, updatedAt = clock.millis()))
-            imageFiles
+            Erasure.receipt(db, receipt, clock.millis())
         }
         // After the commit; if this is interrupted, orphan cleanup removes them.
         withContext(ioDispatcher) { files.forEach(images::delete) }
     }
 
     override suspend fun delete(id: Long, deleteTransaction: Boolean) {
-        val files = write { db ->
+        val files = erase { db ->
             val dao = db.receiptDao()
-            val receipt = dao.getById(id) ?: throw ReceiptException.NotFound()
-            if (receipt.status == ReceiptStatus.DELETED) return@write emptyList()
-            if (receipt.status != ReceiptStatus.CONFIRMED) throw ReceiptException.NotConfirmed()
+            val found = dao.getById(id) ?: return@erase emptyList()
+            if (found.status != ReceiptStatus.CONFIRMED) throw ReceiptException.NotConfirmed()
             // First, so a refused expense deletion (it has refunds) leaves the receipt untouched.
-            if (deleteTransaction) transactions.delete(receipt.transactionId!!)
-            val imageFiles = dao.getImages(id).map { it.fileName }
-            dao.deleteOcrLines(id)
-            dao.deleteImages(id)
-            // Items stay: splits, refunds and price history refer to them.
-            dao.update(receipt.copy(status = ReceiptStatus.DELETED, updatedAt = clock.millis()))
-            imageFiles
+            val expense = found.transactionId
+            if (deleteTransaction && expense != null) Erasure.transaction(db, expense, clock.millis())
+            // Re-read: erasing the expense detached it from the receipt.
+            Erasure.receipt(db, dao.getById(id)!!, clock.millis())
         }
         // After the commit; if this is interrupted, orphan cleanup removes them.
         withContext(ioDispatcher) { files.forEach(images::delete) }

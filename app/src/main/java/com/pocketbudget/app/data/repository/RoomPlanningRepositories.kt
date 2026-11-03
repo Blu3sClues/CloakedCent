@@ -257,7 +257,7 @@ class RoomRecurringRepository(
 
     override suspend fun cancel(id: Long) {
         setState(id, ScheduleState.CANCELLED)
-        // Future projections from a cancelled schedule are withdrawn (soft delete, audited).
+        // Future projections from a cancelled schedule are erased; their occurrences stay so they are not generated again.
         val today = LocalDate.now(clock)
         withContextRead { it.recurringDao().getPendingOccurrences() }
             .filter { it.scheduleId == id && it.dueDate.isAfter(today) }

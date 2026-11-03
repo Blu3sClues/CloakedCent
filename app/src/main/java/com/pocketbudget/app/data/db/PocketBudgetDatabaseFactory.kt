@@ -50,7 +50,10 @@ object PocketBudgetDatabaseFactory {
             // SQLite leaves foreign key enforcement off by default; financial
             // records rely on it, so force it on for every open.
             db.execSQL("PRAGMA foreign_keys = ON")
+            // Deleted data is overwritten, never left in free pages.
+            SecureErase.enableSecureDelete(db)
             LedgerSchema.createTriggers(db)
+            SecureErase.vacuumIfRequested(db)
         }
     }
 }

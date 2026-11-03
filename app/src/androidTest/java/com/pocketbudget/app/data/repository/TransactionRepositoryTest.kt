@@ -2,6 +2,7 @@ package com.pocketbudget.app.data.repository
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pocketbudget.app.core.money.Money
+import com.pocketbudget.app.data.db.SecureErase
 import com.pocketbudget.app.domain.model.RevisionAction
 import com.pocketbudget.app.domain.model.AccountBalance
 import com.pocketbudget.app.domain.model.AccountType
@@ -23,11 +24,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.time.LocalDate
 
 @RunWith(AndroidJUnit4::class)
@@ -219,23 +222,56 @@ class TransactionRepositoryTest {
     }
 
     @Test
-    fun deletingIsSoftAndPreservesHistory() = runTest {
+    fun deletingErasesTheEntryWithItsHistoryAndUnusedPayees() = runTest {
         val a = account("A", 10_000)
         val b = account("B")
-        val expense = t.ledger.record(entry("del", a, EXPENSE, 1_000))
+        val clinic = t.payees.getOrCreate("Clinic")
+        val market = t.payees.getOrCreate("Market")
+        val expense = t.ledger.record(entry("del", a, EXPENSE, 1_000).copy(payeeId = clinic, note = "private"))
+        t.ledger.edit(expense, TransactionEdit(Money(1_200), today, payeeId = clinic, note = "still private"))
+        val kept = t.ledger.record(entry("keep", a, EXPENSE, 300).copy(payeeId = market))
+        val gone = t.ledger.record(entry("gone", a, EXPENSE, 400).copy(payeeId = market))
         t.ledger.recordTransfer(transfer("del", a, b, 2_000))
         val legId = t.ledger.observeRecent(10).first().first { it.type == TransactionType.TRANSFER }.id
+        // Until it is deleted, an edited entry keeps its earlier values.
+        assertEquals(Money(-1_000), t.ledger.observeDetail(expense).first()!!.history.single().amount)
 
         t.ledger.delete(expense)
         t.ledger.delete(expense) // repeat is harmless
+        t.ledger.delete(gone)
         t.ledger.delete(legId)
 
-        assertEquals(Money(10_000), balances().getValue(a).current)
+        assertEquals(Money(9_700), balances().getValue(a).current)
         assertEquals(Money.ZERO, balances().getValue(b).current)
-        assertTrue(t.ledger.observeRecent(10).first().isEmpty())
-        assertEquals("rows are kept", 3L, t.count("SELECT COUNT(*) FROM transactions WHERE is_deleted = 1"))
-        assertEquals(RevisionAction.DELETE, t.db.transactionDao().getRevisions(expense).single().action)
-        assertFails<LedgerException.InvalidOperation> { t.ledger.edit(expense, TransactionEdit(Money(1), today)) }
+        assertEquals(listOf(kept), t.ledger.observeRecent(10).first().map { it.id })
+        // Nothing of the erased entries remains: rows, edit history, transfer, or a payee only they used.
+        assertEquals(1L, t.count("SELECT COUNT(*) FROM transactions"))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM transactions WHERE is_deleted = 1"))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM transaction_revisions"))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM transfers"))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM payees WHERE id = $clinic"))
+        assertEquals("still used", 1L, t.count("SELECT COUNT(*) FROM payees WHERE id = $market"))
+        assertNull(t.ledger.observeDetail(expense).first())
+        assertFails<LedgerException.NotFound> { t.ledger.edit(expense, TransactionEdit(Money(1), today)) }
+        // The file keeps no copies: deleted content is zeroed and the write-ahead log is emptied.
+        assertTrue(SecureErase.isSecureDeleteOn(t.db.openHelper.writableDatabase))
+        val wal = File(t.db.openHelper.writableDatabase.path + "-wal")
+        assertTrue("write-ahead log truncated", !wal.exists() || wal.length() == 0L)
+    }
+
+    @Test
+    fun aPayeeStaysWhileAKeptEntrysHistoryStillNamesIt() = runTest {
+        val a = account("A", 10_000)
+        val old = t.payees.getOrCreate("Old shop")
+        val new = t.payees.getOrCreate("New shop")
+        val first = t.ledger.record(entry("p1", a, EXPENSE, 500).copy(payeeId = old))
+        t.ledger.edit(first, TransactionEdit(Money(500), today, payeeId = new))
+        val other = t.ledger.record(entry("p2", a, EXPENSE, 100).copy(payeeId = old))
+        t.ledger.delete(other)
+        assertEquals("named in the kept entry's history", 1L, t.count("SELECT COUNT(*) FROM payees WHERE id = $old"))
+        assertEquals("Old shop", t.ledger.observeDetail(first).first()!!.history.single().payeeName)
+        t.ledger.delete(first)
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM payees"))
     }
 
     @Test

@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import android.database.sqlite.SQLiteException
 import com.pocketbudget.app.core.money.Money
 import com.pocketbudget.app.data.repository.RoomAccountRepository
+import com.pocketbudget.app.domain.model.TextKeys
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertThrows
@@ -423,6 +424,101 @@ class MigrationTest {
         // Deleted is final.
         assertTrue(runCatching { writable.execSQL("UPDATE receipts SET status = 'CONFIRMED' WHERE id = 1") }.isFailure)
         assertEquals(Money(7_500), RoomAccountRepository({ db }).observeBalances().first().single().current)
+    }
+
+    @Test
+    fun migrate8To9ErasesEverythingSoftDeletedAndUnusedNames() = runTest {
+        val milk = TextKeys.descriptionKey("MILK")
+        helper.createDatabase(TEST_DB, 8).apply {
+            listOf(
+                "INSERT INTO accounts (id, name, type, opening_balance_cents, include_in_totals, is_archived, created_at, updated_at) VALUES (1, 'A', 'CHECKING', 10000, 1, 0, 0, 0), (2, 'B', 'SAVINGS', 0, 1, 0, 0, 0)",
+                "INSERT INTO categories (id, name, kind, parent_id, is_archived, created_at) VALUES (7, 'Food', 'EXPENSE', NULL, 0, 0)",
+                "INSERT INTO payees (id, name, type, created_at) VALUES (1, 'Kept shop', 'MERCHANT', 0), (2, 'Secret clinic', 'MERCHANT', 0), (3, 'Gone store', 'MERCHANT', 0)",
+                "INSERT INTO transfers (id, request_id, from_account_id, to_account_id, created_at) VALUES (1, 'x1', 1, 2, 0)",
+                // 1 is live; 2 and 3 are soft-deleted expenses, 4 and 5 a soft-deleted transfer.
+                """
+                INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on, category_id, payee_id,
+                    transfer_id, note, revision, is_deleted, is_adjustment, created_at, updated_at) VALUES
+                    (1, 'r1', 1, 'EXPENSE', -2500, 'SPENT', 20400, 7, 1, NULL, NULL, 2, 0, 0, 0, 0),
+                    (2, 'r2', 1, 'EXPENSE', -900, 'SPENT', 20400, 7, 2, NULL, 'private', 3, 1, 0, 0, 0),
+                    (3, 'r3', 1, 'EXPENSE', -1000, 'SPENT', 20400, 7, NULL, NULL, NULL, 2, 1, 0, 0, 0),
+                    (4, 'x1-out', 1, 'TRANSFER', -500, 'COMPLETED', 20400, NULL, NULL, 1, NULL, 2, 1, 0, 0, 0),
+                    (5, 'x1-in', 2, 'TRANSFER', 500, 'COMPLETED', 20400, NULL, NULL, 1, NULL, 2, 1, 0, 0, 0)
+                """,
+                """
+                INSERT INTO transaction_revisions (transaction_id, revision, action, account_id, type, amount_cents, status,
+                    occurred_on, category_id, payee_id, note, recorded_at) VALUES
+                    (1, 1, 'UPDATE', 1, 'EXPENSE', -2000, 'SPENT', 20400, 7, 1, 'old note', 0),
+                    (2, 1, 'UPDATE', 1, 'EXPENSE', -800, 'SPENT', 20400, 7, 2, 'earlier private', 0),
+                    (2, 2, 'DELETE', 1, 'EXPENSE', -900, 'SPENT', 20400, 7, 2, 'private', 0)
+                """,
+                """
+                INSERT INTO recurring_schedules (id, name, kind, type, account_id, amount_cents, variable_amount, frequency,
+                    interval_count, start_date, state, created_at, updated_at)
+                VALUES (1, 'Rent', 'RENT', 'EXPENSE', 1, -900, 0, 'MONTHLY', 1, 20400, 'ACTIVE', 0, 0)
+                """,
+                "INSERT INTO recurring_occurrences (schedule_id, due_date, transaction_id, skipped, reminder_sent, overdue_sent, created_at) VALUES (1, 20400, 2, 0, 0, 0, 0)",
+                "INSERT INTO stores (id, name, normalized_name, payee_id, created_at, updated_at) VALUES (1, 'Kept store', 'KEPT STORE', NULL, 0, 0), (2, 'Gone store', 'GONE STORE', 3, 0, 0)",
+                "INSERT INTO products (id, name, normalized_name, created_at, updated_at) VALUES (1, 'Milk', 'MILK', 0, 0), (2, 'Pills', 'PILLS', 0, 0)",
+                // 1 was deleted (v8 kept it, linked to live expense 1), 2 discarded, 3 kept though its expense was deleted.
+                """
+                INSERT INTO receipts (id, request_id, status, store_id, store_name, store_address, tax_cents, discount_cents,
+                    total_cents, receipt_number, transaction_id, uncertain_fields, field_sources, created_at, updated_at) VALUES
+                    (1, 'q1', 'DELETED', 2, 'Gone store', '', 0, 0, 2500, '', 1, '', '', 0, 0),
+                    (2, 'q2', 'DISCARDED', NULL, 'Draft shop', '', 0, 0, 100, '', NULL, '', '', 0, 0),
+                    (3, 'q3', 'CONFIRMED', 1, 'Kept store', '', 0, 0, 1000, '', 3, '', '', 0, 0)
+                """,
+                """
+                INSERT INTO receipt_items (id, receipt_id, position, raw_text, description, product_id, quantity_milli, unit,
+                    line_total_cents, discount_cents, category_id, confidence, uncertain, user_verified) VALUES
+                    (1, 1, 0, 'PILLS', 'Pills', 2, 1000, 'EACH', 1500, 0, 7, 90, 0, 1),
+                    (2, 1, 1, 'MILK', 'Milk', 1, 1000, 'EACH', 1000, 0, 7, 90, 0, 1),
+                    (3, 3, 0, 'MILK', 'Milk', 1, 1000, 'EACH', 1000, 0, 7, 90, 0, 1)
+                """,
+                """
+                INSERT INTO price_observations (product_id, store_id, receipt_item_id, observed_on, quantity_milli, unit, paid_cents, created_at)
+                VALUES (2, 2, 1, 20400, 1000, 'EACH', 1500, 0), (1, 2, 2, 20400, 1000, 'EACH', 1000, 0), (1, 1, 3, 20400, 1000, 'EACH', 1000, 0)
+                """,
+                "INSERT INTO product_aliases (id, store_id, normalized_alias, product_id, times_confirmed, created_at, updated_at) VALUES (1, 2, 'PILLS', 2, 1, 0, 0), (2, 1, '$milk', 1, 3, 0, 0)",
+                "INSERT INTO transaction_splits (transaction_id, category_id, amount_cents, receipt_id, created_at) VALUES (1, 7, 2500, 1, 0), (3, 7, 1000, 3, 0)",
+                "INSERT INTO receipt_ocr_lines (receipt_id, page, line_index, text, confidence) VALUES (1, 0, 0, 'GONE STORE', 90), (2, 0, 0, 'DRAFT SHOP', 90)",
+            ).forEach(::execSQL)
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 9, true, Migrations.MIGRATION_8_9).apply {
+            fun longs(sql: String) = query(sql).use { c -> generateSequence { if (c.moveToNext()) c.getLong(0) else null }.toList() }
+            fun strings(sql: String) = query(sql).use { c -> generateSequence { if (c.moveToNext()) c.getString(0) else null }.toList() }
+            assertEquals(listOf(1L), longs("SELECT id FROM transactions"))
+            assertEquals("a kept entry keeps its edit history", listOf("old note"), strings("SELECT note FROM transaction_revisions"))
+            assertEquals(listOf(0L), longs("SELECT COUNT(*) FROM transfers"))
+            assertEquals(listOf("Kept shop"), strings("SELECT name FROM payees"))
+            assertEquals(listOf(3L), longs("SELECT id FROM receipts"))
+            assertEquals("its deleted expense is unlinked", listOf(0L), longs("SELECT COUNT(*) FROM receipts WHERE transaction_id IS NOT NULL"))
+            assertEquals(listOf(3L), longs("SELECT id FROM receipt_items"))
+            assertEquals(listOf(3L), longs("SELECT receipt_item_id FROM price_observations"))
+            assertEquals(listOf("Milk"), strings("SELECT name FROM products"))
+            assertEquals(listOf("Kept store"), strings("SELECT name FROM stores"))
+            assertEquals("confirmations from erased receipts are forgotten", listOf(1L), longs("SELECT times_confirmed FROM product_aliases"))
+            assertEquals(listOf(0L), longs("SELECT COUNT(*) FROM receipt_ocr_lines"))
+            assertEquals("the live expense keeps its split", listOf(1L), longs("SELECT transaction_id FROM transaction_splits WHERE receipt_id IS NULL"))
+            assertEquals(listOf(1L), longs("SELECT COUNT(*) FROM transaction_splits"))
+            assertEquals("the occurrence stays, so it is not generated again", listOf(1L), longs("SELECT COUNT(*) FROM recurring_occurrences WHERE transaction_id IS NULL"))
+            assertEquals(listOf(1L), longs("SELECT COUNT(*) FROM app_metadata WHERE meta_key = '${AppMetadataKeys.VACUUM_PENDING}'"))
+            close()
+        }
+        // Opening runs the requested VACUUM once, with secure_delete on from then on.
+        val db = PocketBudgetDatabaseFactory.create(context, passphrase, name = TEST_DB)
+        helper.closeWhenFinished(db)
+        assertEquals(Money(7_500), RoomAccountRepository({ db }).observeBalances().first().first { it.account.id == 1L }.current)
+        assertEquals(null, db.appMetadataDao().getValue(AppMetadataKeys.VACUUM_PENDING))
+        assertTrue(SecureErase.isSecureDeleteOn(db.openHelper.writableDatabase))
+        // v9 triggers: live rows still cannot be removed directly.
+        val writable = db.openHelper.writableDatabase
+        assertTrue(runCatching { writable.execSQL("DELETE FROM transactions WHERE id = 1") }.isFailure)
+        assertTrue(runCatching { writable.execSQL("DELETE FROM transaction_revisions") }.isFailure)
+        assertTrue(runCatching { writable.execSQL("DELETE FROM transaction_splits") }.isFailure)
+        assertTrue(runCatching { writable.execSQL("DELETE FROM receipts WHERE id = 3") }.isFailure)
+        assertTrue(runCatching { writable.execSQL("DELETE FROM price_observations") }.isFailure)
     }
 
     @Test

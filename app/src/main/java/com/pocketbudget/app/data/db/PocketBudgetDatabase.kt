@@ -6,6 +6,7 @@ import androidx.room.TypeConverters
 import com.pocketbudget.app.data.db.dao.AccountDao
 import com.pocketbudget.app.data.db.dao.AnalysisDao
 import com.pocketbudget.app.data.db.dao.AppMetadataDao
+import com.pocketbudget.app.data.db.dao.ErasureDao
 import com.pocketbudget.app.data.db.dao.BudgetDao
 import com.pocketbudget.app.data.db.dao.ReceiptDao
 import com.pocketbudget.app.data.db.dao.RefundDao
@@ -83,11 +84,12 @@ abstract class PocketBudgetDatabase : RoomDatabase() {
     abstract fun receiptDao(): ReceiptDao
     abstract fun analysisDao(): AnalysisDao
     abstract fun refundDao(): RefundDao
+    abstract fun erasureDao(): ErasureDao
 
     companion object {
         const val NAME = "pocket_budget.db"
 
         /** Current schema; backups from newer schemas are refused. */
-        const val SCHEMA_VERSION = 8
+        const val SCHEMA_VERSION = 9
     }
 }

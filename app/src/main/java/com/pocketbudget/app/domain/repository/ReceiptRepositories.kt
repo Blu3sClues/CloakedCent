@@ -60,14 +60,14 @@ interface ReceiptRepository {
      */
     suspend fun confirm(id: Long, review: ReceiptReview, target: ConfirmTarget, keepImages: Boolean = true): Long
 
-    /** Rejects a draft and deletes its images. No financial effect. */
+    /** Permanently erases a draft with its images. No financial effect. Repeating it is harmless. */
     suspend fun discard(id: Long)
 
     /**
-     * Deletes a confirmed receipt: its images and OCR text are removed and it no longer
-     * appears in lists, price history or duplicate checks. Its expense keeps its category
-     * splits unless [deleteTransaction], which soft-deletes the expense in the same
-     * transaction (refused while the expense has refunds). Repeating it is harmless.
+     * Permanently erases a confirmed receipt with its images, items, prices and OCR text,
+     * and any store, product or alias only it used. Its expense keeps its category splits
+     * unless [deleteTransaction], which erases the expense in the same transaction
+     * (refused while the expense has refunds). Repeating it is harmless.
      */
     suspend fun delete(id: Long, deleteTransaction: Boolean)
 

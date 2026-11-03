@@ -36,6 +36,35 @@ object LedgerSchema {
         "trg_receipt_items_confirmed_delete",
     )
 
+    /**
+     * Triggers rewritten in v9 so that marked rows can be erased (see ErasureDao);
+     * dropped by that migration and recreated on open. aliases_no_delete is gone.
+     */
+    val ERASURE_TRIGGERS = listOf(
+        "trg_transactions_no_delete",
+        "trg_revisions_immutable_delete",
+        "trg_splits_immutable_update",
+        "trg_splits_immutable_delete",
+        "trg_receipts_final",
+        "trg_receipts_no_delete",
+        "trg_receipt_items_confirmed_delete",
+        "trg_prices_immutable_delete",
+        "trg_aliases_no_delete",
+        "trg_refunds_immutable_update",
+        "trg_refunds_immutable_delete",
+        "trg_refund_allocations_immutable_update",
+        "trg_refund_allocations_immutable_delete",
+    )
+
+    /** Transaction `id` (an SQL expression) is marked for erasure. */
+    private fun marked(id: String) = "EXISTS (SELECT 1 FROM transactions WHERE id = $id AND is_deleted = 1)"
+
+    /** Receipt item `id` (an SQL expression) belongs to a receipt marked for erasure. */
+    private fun itemBeingErased(id: String) = """
+        EXISTS (SELECT 1 FROM receipt_items i JOIN receipts r ON r.id = i.receipt_id
+            WHERE i.id = $id AND r.status IN ('DELETED', 'DISCARDED'))
+    """
+
     private val TRIGGERS = listOf(
         """
         CREATE TRIGGER IF NOT EXISTS trg_transactions_validate_insert
@@ -54,7 +83,8 @@ object LedgerSchema {
         """
         CREATE TRIGGER IF NOT EXISTS trg_transactions_no_delete
         BEFORE DELETE ON transactions
-        BEGIN SELECT RAISE(ABORT, 'transactions are soft-deleted only'); END
+        WHEN OLD.is_deleted = 0
+        BEGIN SELECT RAISE(ABORT, 'only transactions marked for erasure can be removed'); END
         """,
         """
         CREATE TRIGGER IF NOT EXISTS trg_transfers_distinct_accounts
@@ -70,6 +100,7 @@ object LedgerSchema {
         """
         CREATE TRIGGER IF NOT EXISTS trg_revisions_immutable_delete
         BEFORE DELETE ON transaction_revisions
+        WHEN NOT ${marked("OLD.transaction_id")}
         BEGIN SELECT RAISE(ABORT, 'revisions are immutable'); END
         """,
     )
@@ -77,9 +108,9 @@ object LedgerSchema {
     /**
      * v6 rules. Splits belong to a live expense, use expense categories and never add
      * up to more than the expense; once written, they and the expense amount are fixed.
-     * A confirmed receipt is final and always points at an expense; since v8 its only
-     * allowed change is to DELETED, keeping that expense link. Price history is
-     * append-only.
+     * A confirmed receipt is final; its only allowed changes are losing its expense when
+     * that expense is erased, and being marked DELETED for erasure. Price history is
+     * append-only, except that erasing a receipt erases its prices (v9).
      */
     private val RECEIPT_TRIGGERS = listOf(
         """
@@ -97,11 +128,15 @@ object LedgerSchema {
         """
         CREATE TRIGGER IF NOT EXISTS trg_splits_immutable_update
         BEFORE UPDATE ON transaction_splits
+        WHEN NOT (NEW.receipt_id IS NULL AND NEW.transaction_id = OLD.transaction_id
+            AND NEW.category_id = OLD.category_id AND NEW.amount_cents = OLD.amount_cents
+            AND EXISTS (SELECT 1 FROM receipts r WHERE r.id = OLD.receipt_id AND r.status = 'DELETED'))
         BEGIN SELECT RAISE(ABORT, 'splits are immutable'); END
         """,
         """
         CREATE TRIGGER IF NOT EXISTS trg_splits_immutable_delete
         BEFORE DELETE ON transaction_splits
+        WHEN NOT ${marked("OLD.transaction_id")}
         BEGIN SELECT RAISE(ABORT, 'splits are immutable'); END
         """,
         """
@@ -120,18 +155,23 @@ object LedgerSchema {
         """
         CREATE TRIGGER IF NOT EXISTS trg_receipts_final
         BEFORE UPDATE ON receipts
-        WHEN (OLD.status IN ('CONFIRMED', 'DISCARDED', 'DELETED')
-                AND NOT (OLD.status = 'CONFIRMED' AND NEW.status = 'DELETED'
-                    AND NEW.transaction_id IS OLD.transaction_id AND NEW.total_cents IS OLD.total_cents))
-            OR (NEW.status = 'DELETED' AND OLD.status NOT IN ('CONFIRMED', 'DELETED'))
-            OR (NEW.status = 'CONFIRMED' AND (NEW.transaction_id IS NULL OR NEW.total_cents IS NULL))
+        WHEN OLD.status IN ('DISCARDED', 'DELETED')
+            OR (OLD.status = 'CONFIRMED' AND NOT (
+                (NEW.status = 'DELETED' AND NEW.transaction_id IS OLD.transaction_id
+                    AND NEW.total_cents IS OLD.total_cents)
+                OR (NEW.status = 'CONFIRMED' AND NEW.transaction_id IS NULL
+                    AND NEW.total_cents IS OLD.total_cents AND ${marked("OLD.transaction_id")})))
+            OR (NEW.status = 'DELETED' AND OLD.status <> 'CONFIRMED')
+            OR (NEW.status = 'CONFIRMED' AND OLD.status <> 'CONFIRMED'
+                AND (NEW.transaction_id IS NULL OR NEW.total_cents IS NULL))
             OR (NEW.status NOT IN ('CONFIRMED', 'DELETED') AND NEW.transaction_id IS NOT NULL)
         BEGIN SELECT RAISE(ABORT, 'receipt is final or inconsistent'); END
         """,
         """
         CREATE TRIGGER IF NOT EXISTS trg_receipts_no_delete
         BEFORE DELETE ON receipts
-        BEGIN SELECT RAISE(ABORT, 'receipts are discarded, not deleted'); END
+        WHEN OLD.status NOT IN ('DISCARDED', 'DELETED')
+        BEGIN SELECT RAISE(ABORT, 'only receipts marked for erasure can be removed'); END
         """,
         """
         CREATE TRIGGER IF NOT EXISTS trg_receipt_items_validate_insert
@@ -151,7 +191,7 @@ object LedgerSchema {
         """
         CREATE TRIGGER IF NOT EXISTS trg_receipt_items_confirmed_delete
         BEFORE DELETE ON receipt_items
-        WHEN (SELECT status FROM receipts WHERE id = OLD.receipt_id) IN ('CONFIRMED', 'DELETED')
+        WHEN (SELECT status FROM receipts WHERE id = OLD.receipt_id) = 'CONFIRMED'
         BEGIN SELECT RAISE(ABORT, 'confirmed receipt items are kept'); END
         """,
         """
@@ -162,12 +202,8 @@ object LedgerSchema {
         """
         CREATE TRIGGER IF NOT EXISTS trg_prices_immutable_delete
         BEFORE DELETE ON price_observations
+        WHEN NOT ${itemBeingErased("OLD.receipt_item_id")}
         BEGIN SELECT RAISE(ABORT, 'price history is immutable'); END
-        """,
-        """
-        CREATE TRIGGER IF NOT EXISTS trg_aliases_no_delete
-        BEFORE DELETE ON product_aliases
-        BEGIN SELECT RAISE(ABORT, 'learned aliases are kept'); END
         """,
     )
 
@@ -200,11 +236,15 @@ object LedgerSchema {
         """
         CREATE TRIGGER IF NOT EXISTS trg_refunds_immutable_update
         BEFORE UPDATE ON refunds
+        WHEN NOT (NEW.receipt_item_id IS NULL AND NEW.refund_transaction_id = OLD.refund_transaction_id
+            AND NEW.original_transaction_id = OLD.original_transaction_id
+            AND ${itemBeingErased("OLD.receipt_item_id")})
         BEGIN SELECT RAISE(ABORT, 'refunds are immutable'); END
         """,
         """
         CREATE TRIGGER IF NOT EXISTS trg_refunds_immutable_delete
         BEFORE DELETE ON refunds
+        WHEN NOT ${marked("OLD.refund_transaction_id")}
         BEGIN SELECT RAISE(ABORT, 'refunds are immutable'); END
         """,
         """
@@ -226,11 +266,15 @@ object LedgerSchema {
         """
         CREATE TRIGGER IF NOT EXISTS trg_refund_allocations_immutable_update
         BEFORE UPDATE ON refund_allocations
+        WHEN NOT (NEW.receipt_item_id IS NULL AND NEW.item_net_cents IS NULL AND NEW.quantity_milli IS NULL
+            AND NEW.refund_transaction_id = OLD.refund_transaction_id AND NEW.category_id IS OLD.category_id
+            AND NEW.amount_cents = OLD.amount_cents AND ${itemBeingErased("OLD.receipt_item_id")})
         BEGIN SELECT RAISE(ABORT, 'refund allocations are immutable'); END
         """,
         """
         CREATE TRIGGER IF NOT EXISTS trg_refund_allocations_immutable_delete
         BEFORE DELETE ON refund_allocations
+        WHEN NOT ${marked("OLD.refund_transaction_id")}
         BEGIN SELECT RAISE(ABORT, 'refund allocations are immutable'); END
         """,
         """

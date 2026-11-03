@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -130,12 +131,21 @@ class TransactionDetailViewModel(
 
     /** [actualAmount] replaces the projected amount (variable bills) in the same atomic step. */
     fun markCompleted(actualAmount: Money?) = act { transactions.confirm(id, actualAmount) }
-    fun delete() = act { transactions.delete(id) }
+    private val _deleted = MutableStateFlow(false)
+
+    /** Set once this entry has been erased; the screen then closes, as nothing is left to show. */
+    val deleted: StateFlow<Boolean> = _deleted.asStateFlow()
+
+    fun delete() = act {
+        transactions.delete(id)
+        _deleted.value = true
+    }
 
     /** Deletes this expense and its receipt together, atomically. */
     fun deleteWithReceipt() = act {
         val receipt = receiptId.value
         if (receipt != null && receipts != null) receipts.delete(receipt, deleteTransaction = true) else transactions.delete(id)
+        _deleted.value = true
     }
 
     private fun act(action: suspend () -> Unit) {
@@ -179,6 +189,8 @@ fun TransactionDetailRoute(
     val refundSummary by viewModel.refundSummary.collectAsStateWithLifecycle()
     val originalId by viewModel.originalId.collectAsStateWithLifecycle()
     val refundError by viewModel.refundError.collectAsStateWithLifecycle()
+    val deleted by viewModel.deleted.collectAsStateWithLifecycle()
+    LaunchedEffect(deleted) { if (deleted) onBack() }
     TransactionDetailScreen(
         state, error, onBack, onEdit, viewModel::markCompleted, viewModel::delete, receiptId, onOpenReceipt,
         RefundUi(refundSummary, originalId, refundError, viewModel::refund, onOpenTransaction),

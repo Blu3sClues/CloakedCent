@@ -414,6 +414,10 @@ class BackupRestoreTest {
             execSQL("INSERT INTO categories (id, name, kind, parent_id, is_archived, created_at) VALUES (5, 'Food', 'EXPENSE', NULL, 0, 0)")
             execSQL("INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on, category_id, revision, is_deleted, is_adjustment, created_at, updated_at) VALUES (1, 'r1', 1, 'EXPENSE', -2500, 'SPENT', 20400, 5, 1, 0, 0, 0, 0)")
             execSQL("INSERT INTO stores (id, name, normalized_name, created_at, updated_at) VALUES (1, 'Walmart Supercenter', 'WALMART SUPERCENTER', 0, 0)")
+            // In use, so the v9 clean-up of unused names keeps it.
+            execSQL(
+                "INSERT INTO receipts (id, request_id, status, store_id, store_name, store_address, tax_cents, discount_cents, receipt_number, uncertain_fields, field_sources, created_at, updated_at) VALUES (1, 'q1', 'NEEDS_REVIEW', 1, 'Walmart Supercenter', '', 0, 0, '', '', '', 0, 0)",
+            )
             close()
         }
         val db = context.getDatabasePath(name).readBytes()

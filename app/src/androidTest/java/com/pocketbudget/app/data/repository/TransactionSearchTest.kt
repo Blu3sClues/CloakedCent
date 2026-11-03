@@ -94,18 +94,19 @@ class TransactionSearchTest {
     }
 
     @Test
-    fun deletedEntriesDisappearFromSearchButKeepAuditDetail() = runTest {
+    fun editsKeepTheirHistoryUntilTheEntryIsDeleted() = runTest {
         val id = search(TransactionFilter(payeeId = market)).single().id
         t.ledger.edit(id, TransactionEdit(Money(4_500), nov1, groceries, market, "bigger shop"))
-        t.ledger.delete(id)
-
-        assertTrue(search(TransactionFilter(payeeId = market)).isEmpty())
         val detail = t.ledger.observeDetail(id).first()!!
-        assertTrue(detail.isDeleted)
-        assertEquals(listOf(RevisionAction.UPDATE, RevisionAction.DELETE), detail.history.map { it.action })
+        assertEquals(listOf(RevisionAction.UPDATE), detail.history.map { it.action })
         assertEquals(Money(-4_000), detail.history.first().amount)
         assertEquals("Groceries", detail.history.first().categoryName)
         assertEquals("Fresh Market", detail.history.first().payeeName)
+
+        t.ledger.delete(id)
+        assertTrue(search(TransactionFilter(payeeId = market)).isEmpty())
+        assertNull(t.ledger.observeDetail(id).first())
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM transaction_revisions WHERE transaction_id = $id"))
     }
 
     @Test

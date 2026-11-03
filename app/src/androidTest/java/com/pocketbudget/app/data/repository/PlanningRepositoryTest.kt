@@ -190,7 +190,10 @@ class PlanningRepositoryTest {
         assertEquals(ScheduleState.CANCELLED, recurring.get(id)!!.state)
         assertTrue("future projections removed", scheduled().isEmpty())
         assertEquals(0, recurring.generateDue(LocalDate.of(2027, 6, 1)))
-        assertEquals("history kept (soft deleted)", 2L, t.count("SELECT COUNT(*) FROM transactions"))
+        // The withdrawn projections are erased; their dated occurrences stay so they are never generated again.
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM transactions"))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM recurring_occurrences WHERE transaction_id IS NOT NULL"))
+        assertTrue(t.count("SELECT COUNT(*) FROM recurring_occurrences WHERE schedule_id = $id") >= 2)
     }
 
     @Test

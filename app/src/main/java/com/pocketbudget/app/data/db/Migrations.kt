@@ -222,6 +222,102 @@ object Migrations {
         }
     }
 
-    val ALL: Array<Migration> =
-        arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+    /**
+     * v9: deletion is permanent. The triggers that forbade removing rows now allow it for
+     * rows marked for erasure (see ErasureDao). Everything kept by earlier soft deletes is
+     * erased here: deleted transactions with their history, splits and refund links;
+     * deleted and discarded receipts with their items, prices and text; and payees, stores,
+     * products and aliases nothing uses any more. A VACUUM is then requested so the file
+     * itself keeps no trace (it cannot run inside the migration's transaction).
+     */
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            LedgerSchema.ERASURE_TRIGGERS.forEach { db.execSQL("DROP TRIGGER IF EXISTS $it") }
+            val receipts = "SELECT id FROM receipts WHERE status IN ('DELETED', 'DISCARDED')"
+            val items = "SELECT id FROM receipt_items WHERE receipt_id IN ($receipts)"
+            val transactions = "SELECT id FROM transactions WHERE is_deleted = 1"
+            listOf(
+                "UPDATE transaction_splits SET receipt_id = NULL WHERE receipt_id IN ($receipts)",
+                "UPDATE refunds SET receipt_item_id = NULL WHERE receipt_item_id IN ($items)",
+                "UPDATE refund_allocations SET receipt_item_id = NULL, item_net_cents = NULL, quantity_milli = NULL WHERE receipt_item_id IN ($items)",
+                "DELETE FROM price_observations WHERE receipt_item_id IN ($items)",
+                "DELETE FROM receipt_items WHERE receipt_id IN ($receipts)",
+                "DELETE FROM receipt_ocr_lines WHERE receipt_id IN ($receipts)",
+                "DELETE FROM receipt_images WHERE receipt_id IN ($receipts)",
+                "DELETE FROM receipts WHERE status IN ('DELETED', 'DISCARDED')",
+                "UPDATE receipts SET transaction_id = NULL WHERE transaction_id IN ($transactions)",
+                "DELETE FROM transaction_splits WHERE transaction_id IN ($transactions)",
+                "DELETE FROM refund_allocations WHERE refund_transaction_id IN ($transactions)",
+                "DELETE FROM refunds WHERE refund_transaction_id IN ($transactions) OR original_transaction_id IN ($transactions)",
+                "UPDATE recurring_occurrences SET transaction_id = NULL WHERE transaction_id IN ($transactions)",
+                "DELETE FROM transaction_revisions WHERE transaction_id IN ($transactions)",
+                "DELETE FROM transactions WHERE is_deleted = 1",
+                "DELETE FROM transfers WHERE id NOT IN (SELECT transfer_id FROM transactions WHERE transfer_id IS NOT NULL)",
+            ).forEach(db::execSQL)
+            forgetUnsupportedAliases(db)
+            listOf(
+                """
+                DELETE FROM product_aliases
+                WHERE product_id NOT IN (SELECT product_id FROM receipt_items WHERE product_id IS NOT NULL)
+                    AND product_id NOT IN (SELECT product_id FROM price_observations)
+                """,
+                """
+                DELETE FROM products
+                WHERE id NOT IN (SELECT product_id FROM receipt_items WHERE product_id IS NOT NULL)
+                    AND id NOT IN (SELECT product_id FROM price_observations)
+                    AND id NOT IN (SELECT product_id FROM product_aliases)
+                """,
+                """
+                DELETE FROM stores
+                WHERE id NOT IN (SELECT store_id FROM receipts WHERE store_id IS NOT NULL)
+                    AND id NOT IN (SELECT store_id FROM price_observations)
+                    AND id NOT IN (SELECT store_id FROM product_aliases)
+                """,
+                """
+                DELETE FROM payees
+                WHERE id NOT IN (SELECT payee_id FROM transactions WHERE payee_id IS NOT NULL)
+                    AND id NOT IN (SELECT payee_id FROM transaction_revisions WHERE payee_id IS NOT NULL)
+                    AND id NOT IN (SELECT payee_id FROM stores WHERE payee_id IS NOT NULL)
+                    AND id NOT IN (SELECT payee_id FROM recurring_schedules WHERE payee_id IS NOT NULL)
+                """,
+            ).forEach(db::execSQL)
+            db.execSQL(
+                "INSERT OR REPLACE INTO app_metadata (meta_key, meta_value) VALUES (?, '1')",
+                arrayOf<Any>(AppMetadataKeys.VACUUM_PENDING),
+            )
+        }
+
+        /** An alias is supported by the confirmed items at its store that teach its key. */
+        private fun forgetUnsupportedAliases(db: SupportSQLiteDatabase) {
+            val support = mutableMapOf<Pair<Long, String>, Int>()
+            db.query(
+                """
+                SELECT r.store_id, i.raw_text, i.description FROM receipt_items i JOIN receipts r ON r.id = i.receipt_id
+                WHERE r.status = 'CONFIRMED' AND r.store_id IS NOT NULL
+                """,
+            ).use { c ->
+                while (c.moveToNext()) {
+                    val key = TextKeys.descriptionKey(c.getString(1).ifBlank { c.getString(2) })
+                    if (key.isNotEmpty()) support.merge(c.getLong(0) to key, 1, Int::plus)
+                }
+            }
+            val aliases = mutableListOf<Triple<Long, Pair<Long, String>, Int>>()
+            db.query("SELECT id, store_id, normalized_alias, times_confirmed FROM product_aliases").use { c ->
+                while (c.moveToNext()) aliases += Triple(c.getLong(0), c.getLong(1) to c.getString(2), c.getInt(3))
+            }
+            aliases.forEach { (id, key, times) ->
+                val count = support[key] ?: 0
+                if (count == 0) {
+                    db.execSQL("DELETE FROM product_aliases WHERE id = ?", arrayOf<Any>(id))
+                } else if (times > count) {
+                    // Confirmations taught by erased receipts are no longer counted.
+                    db.execSQL("UPDATE product_aliases SET times_confirmed = ? WHERE id = ?", arrayOf<Any>(count, id))
+                }
+            }
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(
+        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+    )
 }

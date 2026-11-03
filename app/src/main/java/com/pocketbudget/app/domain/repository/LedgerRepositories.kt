@@ -81,7 +81,11 @@ interface TransactionRepository {
     /** Edits an entry (both legs for transfers), keeping the previous values as a revision. */
     suspend fun edit(id: Long, edit: TransactionEdit)
 
-    /** Soft-deletes an entry (both legs for transfers), keeping it in history. */
+    /**
+     * Permanently erases an entry (both legs for transfers) with its edit history; nothing
+     * of it remains. Refused for an expense that still has refunds. A receipt attached to
+     * it is kept, without an expense. Erasing something already gone does nothing.
+     */
     suspend fun delete(id: Long)
 
     /**

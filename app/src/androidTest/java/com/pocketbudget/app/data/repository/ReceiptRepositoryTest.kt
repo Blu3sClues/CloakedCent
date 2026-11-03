@@ -25,6 +25,7 @@ import com.pocketbudget.app.domain.model.ReceiptException
 import com.pocketbudget.app.domain.model.ReceiptReview
 import com.pocketbudget.app.domain.model.ReceiptStatus
 import com.pocketbudget.app.domain.model.RevisionAction
+import com.pocketbudget.app.domain.model.TextKeys
 import com.pocketbudget.app.domain.model.TransactionEdit
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
@@ -353,20 +354,32 @@ class ReceiptRepositoryTest {
         assertEquals(2, t.db.receiptDao().getAlias(t.db.receiptDao().findStores(com.pocketbudget.app.domain.model.TextKeys.storeKey("Fresh Mart")).single().id, "GV MLK 2 1L")!!.timesConfirmed)
     }
 
+    /** Rows in every table a receipt writes to, or that learns from one. */
+    private fun receiptTraces(): Map<String, Long> =
+        listOf("receipts", "receipt_items", "receipt_ocr_lines", "receipt_images", "price_observations", "products", "product_aliases", "stores")
+            .associateWith { t.count("SELECT COUNT(*) FROM $it") }
+
+    private val noReceiptTraces = receiptTracesOf(0)
+
+    private fun receiptTracesOf(n: Long) =
+        listOf("receipts", "receipt_items", "receipt_ocr_lines", "receipt_images", "price_observations", "products", "product_aliases", "stores")
+            .associateWith { n }
+
     @Test
-    fun discardRemovesImagesWithoutFinancialEffect() = runTest {
+    fun discardErasesTheDraftWithoutFinancialEffect() = runTest {
         val id = scanned(15)
         val verified = verified(id)
         val before = transactionCount()
         assertEquals(1, dir.listFiles()!!.size)
         receipts.discard(id)
-        assertEquals(ReceiptStatus.DISCARDED, t.db.receiptDao().getById(id)!!.status)
+        receipts.discard(id) // repeat is harmless
+        assertEquals(noReceiptTraces, receiptTraces())
         assertEquals(0, dir.listFiles()!!.size)
         assertEquals(before, transactionCount())
         try {
             receipts.confirm(id, verified, ConfirmTarget.NewExpense(checking))
-            fail("discarded receipts are final")
-        } catch (_: ReceiptException.NotEditable) {
+            fail("discarded receipts are gone")
+        } catch (_: ReceiptException.NotFound) {
         }
         assertNull(receipts.observeSummaries().first().firstOrNull { it.id == id })
     }
@@ -387,42 +400,67 @@ class ReceiptRepositoryTest {
     }
 
     @Test
-    fun deletingOnlyTheReceiptKeepsTheExpenseAndItsSplits() = runTest {
+    fun deletingOnlyTheReceiptErasesItButKeepsTheExpenseAndItsSplits() = runTest {
         val id = scanned(18)
         val expense = receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))
         val splits = t.db.receiptDao().getSplits(expense).map { it.categoryId to it.amountCents }
         val balance = balance()
-        assertEquals(2, t.db.receiptDao().observeAllPrices().first().size)
+        val payee = t.db.transactionDao().getById(expense)!!.payeeId!!
+        assertEquals(receiptTracesOf(1) + mapOf("receipt_items" to 2L, "price_observations" to 2L, "products" to 2L, "product_aliases" to 2L, "receipt_ocr_lines" to groceryText.size.toLong()), receiptTraces())
 
         receipts.delete(id, deleteTransaction = false)
+        receipts.delete(id, deleteTransaction = false) // repeat is harmless
 
-        assertEquals(ReceiptStatus.DELETED, t.db.receiptDao().getById(id)!!.status)
-        assertNull(receipts.observeSummaries().first().firstOrNull { it.id == id })
-        assertNull(receipts.observeReceiptFor(expense).first())
+        // The receipt and everything learned only from it are gone.
+        assertEquals(noReceiptTraces, receiptTraces())
         assertEquals(0, dir.listFiles()!!.size)
-        assertEquals(0L, t.count("SELECT COUNT(*) FROM receipt_ocr_lines WHERE receipt_id = $id"))
-        assertTrue(t.db.receiptDao().observeAllPrices().first().isEmpty())
-        // The expense, its balance effect and its category splits are untouched.
+        assertNull(receipts.observeDetail(id).first())
+        assertNull(receipts.observeReceiptFor(expense).first())
+        // The expense, its payee, balance effect and category splits are untouched.
         assertFalse(t.db.transactionDao().getById(expense)!!.isDeleted)
+        assertEquals(1L, t.count("SELECT COUNT(*) FROM payees WHERE id = $payee"))
         assertEquals(balance, balance())
         assertEquals(splits, t.db.receiptDao().getSplits(expense).map { it.categoryId to it.amountCents })
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM transaction_splits WHERE receipt_id IS NOT NULL"))
         // A kept expense is never offered to another receipt (it is already split).
         val next = scanned(19)
         assertTrue(receipts.findMatches(next).none { it.transactionId == expense })
-        // Repeating is harmless.
-        receipts.delete(id, deleteTransaction = false)
     }
 
     @Test
-    fun deletingTheReceiptWithItsExpenseRemovesBoth() = runTest {
+    fun deletingTheReceiptWithItsExpenseErasesBothAndTheirNames() = runTest {
         val before = balance()
         val id = scanned(20)
         val expense = receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))
         receipts.delete(id, deleteTransaction = true)
-        assertEquals(ReceiptStatus.DELETED, t.db.receiptDao().getById(id)!!.status)
-        assertTrue(t.db.transactionDao().getById(expense)!!.isDeleted)
+        assertEquals(noReceiptTraces, receiptTraces())
+        assertNull(t.db.transactionDao().getById(expense))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM transaction_splits"))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM transaction_revisions"))
+        assertEquals("the store's payee went with them", 0L, t.count("SELECT COUNT(*) FROM payees"))
         assertEquals(before, balance())
         assertEquals(0, dir.listFiles()!!.size)
+    }
+
+    @Test
+    fun namesSharedWithAnotherReceiptStay() = runTest {
+        val first = scanned(24)
+        receipts.confirm(first, verified(first), ConfirmTarget.NewExpense(checking))
+        val second = scanned(25)
+        receipts.confirm(second, verified(second), ConfirmTarget.NewExpense(checking))
+        val store = t.db.receiptDao().getById(second)!!.storeId!!
+        val milk = t.db.receiptDao().getItems(second).first()
+        val alias = t.db.receiptDao().getAlias(store, TextKeys.descriptionKey(milk.rawText.ifBlank { milk.description }))!!
+        assertEquals(2, alias.timesConfirmed)
+
+        receipts.delete(first, deleteTransaction = true)
+
+        // The other receipt still uses the store, products and alias; only the erased confirmation is forgotten.
+        assertEquals(1L, t.count("SELECT COUNT(*) FROM stores"))
+        assertEquals(2L, t.count("SELECT COUNT(*) FROM products"))
+        assertEquals(1, t.db.receiptDao().getAlias(store, alias.normalizedAlias)!!.timesConfirmed)
+        assertEquals(2L, t.count("SELECT COUNT(*) FROM price_observations"))
+        assertEquals(1L, t.count("SELECT COUNT(*) FROM payees"))
     }
 
     @Test
@@ -431,31 +469,46 @@ class ReceiptRepositoryTest {
         val expense = receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))
         val refunds = RoomRefundRepository({ t.db }, clock)
         refunds.refundItem(t.db.receiptDao().getItems(id).first().id, 1_000, null, today, "refund-milk")
+        val traces = receiptTraces()
 
         assertTrue(runCatching { receipts.delete(id, deleteTransaction = true) }.isFailure)
         assertEquals(ReceiptStatus.CONFIRMED, t.db.receiptDao().getById(id)!!.status)
         assertFalse(t.db.transactionDao().getById(expense)!!.isDeleted)
+        assertEquals(traces, receiptTraces())
         assertEquals(1, dir.listFiles()!!.size)
 
-        // Deleting only the receipt is allowed; the refund stays recorded against the expense.
+        // Deleting only the receipt is allowed; the refund stays recorded against the expense,
+        // by category and amount, without the erased item's details.
         receipts.delete(id, deleteTransaction = false)
-        assertEquals(ReceiptStatus.DELETED, t.db.receiptDao().getById(id)!!.status)
+        assertEquals(noReceiptTraces, receiptTraces())
         assertTrue(refunds.observeSummary(expense).first()!!.refunded.isPositive)
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM refunds WHERE receipt_item_id IS NOT NULL"))
+        assertEquals(
+            0L,
+            t.count("SELECT COUNT(*) FROM refund_allocations WHERE receipt_item_id IS NOT NULL OR item_net_cents IS NOT NULL OR quantity_milli IS NOT NULL"),
+        )
     }
 
     @Test
     fun deletingOnlyTheExpenseKeepsTheReceipt() = runTest {
         val id = scanned(22)
         val expense = receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))
+        val traces = receiptTraces()
         t.ledger.delete(expense)
+        assertNull(t.db.transactionDao().getById(expense))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM transaction_splits"))
+        // The receipt is untouched apart from its link to the erased expense.
+        assertEquals(traces, receiptTraces())
         val detail = receipts.observeDetail(id).first()!!
         assertEquals(ReceiptStatus.CONFIRMED, detail.status)
+        assertNull(detail.transactionId)
         assertTrue(detail.expenseDeleted)
         assertEquals(1, detail.pages.size)
         assertTrue(receipts.observeSummaries().first().any { it.id == id })
-        // It can still be deleted on its own later.
-        receipts.delete(id, deleteTransaction = false)
-        assertEquals(ReceiptStatus.DELETED, t.db.receiptDao().getById(id)!!.status)
+        // It cannot be confirmed onto another expense, but can still be deleted on its own.
+        assertTrue(runCatching { receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking)) }.isFailure)
+        receipts.delete(id, deleteTransaction = true)
+        assertEquals(noReceiptTraces, receiptTraces())
     }
 
     @Test

@@ -160,9 +160,15 @@ class RefundRepositoryTest {
         }
         assertTrue(direct.isFailure)
 
-        // Deleting a refund (audited) makes its amount refundable again.
+        // Deleting a refund erases it with its links and allocations, and makes its amount refundable again.
         t.ledger.delete(first)
         assertEquals(Money(5_000), refunds.observeSummary(id).first()!!.remaining)
+        assertNull(t.db.transactionDao().getById(first))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM refunds WHERE refund_transaction_id = $first"))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM refund_allocations WHERE refund_transaction_id = $first"))
+        // With no refunds left, the expense itself can be erased.
+        t.ledger.delete(id)
+        assertNull(t.db.transactionDao().getById(id))
     }
 
     @Test

@@ -17,13 +17,10 @@ enum class ReceiptStatus {
     /** Verified and linked to exactly one expense. Final. */
     CONFIRMED,
 
-    /** Rejected by the user; images removed. Final. */
+    /** A draft the user rejected. Only a transient mark: the receipt is erased in the same transaction. */
     DISCARDED,
 
-    /**
-     * A confirmed receipt the user deleted; images and OCR text removed, hidden everywhere.
-     * Kept as a record because splits, refunds and price history refer to it. Final.
-     */
+    /** A confirmed receipt the user deleted. Only a transient mark: it is erased in the same transaction. */
     DELETED,
 }
 
