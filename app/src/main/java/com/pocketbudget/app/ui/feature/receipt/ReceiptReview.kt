@@ -243,6 +243,8 @@ class ReceiptReviewViewModel(
     val receiptId: Long,
     private val refunds: RefundRepository? = null,
     private val dayFirst: Boolean = Locale.getDefault().country != "US",
+    /** Read at confirmation, so a change in Settings applies to receipts already open. */
+    private val keepImages: () -> Boolean = { true },
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReviewUiState())
@@ -434,7 +436,7 @@ class ReceiptReviewViewModel(
             ExpenseChoice.New -> ConfirmTarget.NewExpense(s.accountId ?: throw FormError(R.string.error_account_required))
             is ExpenseChoice.Match -> ConfirmTarget.Existing(choice.transactionId, s.replaceAmount)
         }
-        receipts.confirm(receiptId, review, target)
+        receipts.confirm(receiptId, review, target, keepImages())
         _state.update { it.copy(done = true) }
     }
 
@@ -492,6 +494,7 @@ class ReceiptReviewViewModel(
                     container.categoryRepository,
                     requireNotNull(createSavedStateHandle().get<Long>(ARG_RECEIPT_ID)),
                     container.refundRepository,
+                    keepImages = { container.settingsRepository.keepReceiptImages.value },
                 )
             }
         }

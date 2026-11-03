@@ -127,6 +127,29 @@ class UsabilityTest {
         assertEquals(ThemeMode.LIGHT, chosen)
     }
 
+    @Test
+    fun turningOffReceiptImagesNeedsConfirmation() {
+        var keep by mutableStateOf(true)
+        compose.setContent {
+            PocketBudgetTheme {
+                SettingsScreen(ThemeMode.SYSTEM, {}, {}, keepReceiptImages = keep, onKeepReceiptImagesChange = { keep = it })
+            }
+        }
+        compose.onNodeWithText("Keep receipt images").performClick()
+        compose.onNodeWithText("Stop keeping receipt images?").assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(true, keep)
+
+        compose.onNodeWithText("Keep receipt images").performClick()
+        compose.onNodeWithText("Turn off").performClick()
+        assertEquals(false, keep)
+
+        // Turning images back on loses nothing, so it takes effect straight away.
+        compose.onNodeWithText("Keep receipt images").performClick()
+        compose.onNodeWithText("Stop keeping receipt images?").assertDoesNotExist()
+        assertEquals(true, keep)
+    }
+
     // setContent may be called once per rule; the loop test swaps content via this state instead.
     private var contentKey by mutableStateOf(0)
     private var contentSet = false

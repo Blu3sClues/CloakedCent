@@ -13,13 +13,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,6 +45,7 @@ import com.pocketbudget.app.domain.model.ThemeMode
 import com.pocketbudget.app.domain.repository.SettingsRepository
 import com.pocketbudget.app.domain.repository.StorageRepository
 import com.pocketbudget.app.ui.components.BackTopBar
+import com.pocketbudget.app.ui.components.ConfirmDialog
 import com.pocketbudget.app.ui.components.SectionHeader
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +58,9 @@ class SettingsViewModel(
 ) : ViewModel() {
     val themeMode: StateFlow<ThemeMode> = settings.themeMode
     fun setThemeMode(mode: ThemeMode) = settings.setThemeMode(mode)
+
+    val keepReceiptImages: StateFlow<Boolean> = settings.keepReceiptImages
+    fun setKeepReceiptImages(keep: Boolean) = settings.setKeepReceiptImages(keep)
 
     private val _cipherVersion = MutableStateFlow<String?>(null)
 
@@ -85,7 +94,18 @@ fun SettingsRoute(
 ) {
     val mode by viewModel.themeMode.collectAsStateWithLifecycle()
     val cipherVersion by viewModel.cipherVersion.collectAsStateWithLifecycle()
-    SettingsScreen(mode, onBack, viewModel::setThemeMode, onBackup, onRestore, cipherVersion, onLicences)
+    val keepReceiptImages by viewModel.keepReceiptImages.collectAsStateWithLifecycle()
+    SettingsScreen(
+        mode,
+        onBack,
+        viewModel::setThemeMode,
+        onBackup,
+        onRestore,
+        cipherVersion,
+        onLicences,
+        keepReceiptImages,
+        viewModel::setKeepReceiptImages,
+    )
 }
 
 @Composable
@@ -97,6 +117,8 @@ fun SettingsScreen(
     onRestore: () -> Unit = {},
     cipherVersion: String? = null,
     onLicences: () -> Unit = {},
+    keepReceiptImages: Boolean = true,
+    onKeepReceiptImagesChange: (Boolean) -> Unit = {},
 ) {
     Scaffold(topBar = { BackTopBar(stringResource(R.string.settings_title), onBack) }) { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -118,6 +140,42 @@ fun SettingsScreen(
                         Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp))
                     }
                 }
+            }
+            SectionHeader(stringResource(R.string.settings_receipts))
+            var confirmingImageDeletion by rememberSaveable { mutableStateOf(false) }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .toggleable(value = keepReceiptImages, role = Role.Switch) { keep ->
+                        // Turning images off loses data later, so it needs confirming; turning them back on does not.
+                        if (keep) onKeepReceiptImagesChange(true) else confirmingImageDeletion = true
+                    }
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.settings_keep_receipt_images), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(
+                            if (keepReceiptImages) R.string.settings_keep_receipt_images_on else R.string.settings_keep_receipt_images_off,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = keepReceiptImages, onCheckedChange = null, modifier = Modifier.padding(start = 16.dp))
+            }
+            if (confirmingImageDeletion) {
+                ConfirmDialog(
+                    title = stringResource(R.string.settings_keep_receipt_images_confirm_title),
+                    text = stringResource(R.string.settings_keep_receipt_images_confirm_body),
+                    confirmLabel = stringResource(R.string.settings_keep_receipt_images_confirm_action),
+                    onConfirm = {
+                        confirmingImageDeletion = false
+                        onKeepReceiptImagesChange(false)
+                    },
+                    onDismiss = { confirmingImageDeletion = false },
+                )
             }
             SectionHeader(stringResource(R.string.settings_backup))
             Text(stringResource(R.string.settings_backup_body), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 8.dp))

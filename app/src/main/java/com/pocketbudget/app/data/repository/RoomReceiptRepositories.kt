@@ -322,10 +322,23 @@ class RoomReceiptRepository(
             }
     }
 
-    override suspend fun confirm(id: Long, review: ReceiptReview, target: ConfirmTarget): Long = write { db ->
+    override suspend fun confirm(id: Long, review: ReceiptReview, target: ConfirmTarget, keepImages: Boolean): Long {
+        val (transactionId, files) = confirmInTransaction(id, review, target, keepImages)
+        // After the commit; if this is interrupted, orphan cleanup removes them.
+        withContext(ioDispatcher) { files.forEach(images::delete) }
+        return transactionId
+    }
+
+    /** Returns the expense id and the image files to delete once committed. */
+    private suspend fun confirmInTransaction(
+        id: Long,
+        review: ReceiptReview,
+        target: ConfirmTarget,
+        keepImages: Boolean,
+    ): Pair<Long, List<String>> = write { db ->
         val dao = db.receiptDao()
         val receipt = dao.getById(id) ?: throw ReceiptException.NotFound()
-        if (receipt.status == ReceiptStatus.CONFIRMED) return@write receipt.transactionId!!
+        if (receipt.status == ReceiptStatus.CONFIRMED) return@write receipt.transactionId!! to emptyList()
         if (!receipt.isEditable) throw ReceiptException.NotEditable()
         validateForConfirm(db, review)
         val total = review.total!!
@@ -403,7 +416,9 @@ class RoomReceiptRepository(
                 confirmedAt = now,
             ),
         )
-        transactionId
+        val imageFiles = if (keepImages) emptyList() else dao.getImages(id).map { it.fileName }
+        if (!keepImages) dao.deleteImages(id)
+        transactionId to imageFiles
     }
 
     /** Links to an existing expense without ever creating another one. */

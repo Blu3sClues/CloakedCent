@@ -55,9 +55,10 @@ interface ReceiptRepository {
     /**
      * Verifies [review] adds up, then atomically creates or attaches exactly one expense,
      * splits it by category, and records products, aliases and prices. Repeating it for a
-     * confirmed receipt returns the same expense. Returns the expense id.
+     * confirmed receipt returns the same expense. Returns the expense id. Unless
+     * [keepImages], the page images are deleted once the confirmation is committed.
      */
-    suspend fun confirm(id: Long, review: ReceiptReview, target: ConfirmTarget): Long
+    suspend fun confirm(id: Long, review: ReceiptReview, target: ConfirmTarget, keepImages: Boolean = true): Long
 
     /** Rejects a draft and deletes its images. No financial effect. */
     suspend fun discard(id: Long)

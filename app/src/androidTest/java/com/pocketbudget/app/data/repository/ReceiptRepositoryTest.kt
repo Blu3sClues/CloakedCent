@@ -372,6 +372,29 @@ class ReceiptRepositoryTest {
     }
 
     @Test
+    fun confirmingWithoutKeepingImagesDeletesThemButKeepsTheReceipt() = runTest {
+        val id = scanned(16)
+        assertEquals(1, dir.listFiles()!!.size)
+        val expense = receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking), keepImages = false)
+        val detail = receipts.observeDetail(id).first()!!
+        assertEquals(ReceiptStatus.CONFIRMED, detail.status)
+        assertEquals(expense, detail.transactionId)
+        assertTrue(detail.review.items.isNotEmpty())
+        assertTrue(detail.pages.isEmpty())
+        assertEquals(0, dir.listFiles()!!.size)
+        // Repeating the confirmation still returns the same expense.
+        assertEquals(expense, receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking), keepImages = false))
+    }
+
+    @Test
+    fun confirmingKeepsImagesByDefault() = runTest {
+        val id = scanned(17)
+        receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))
+        assertEquals(1, receipts.observeDetail(id).first()!!.pages.size)
+        assertEquals(1, dir.listFiles()!!.size)
+    }
+
+    @Test
     fun interruptedImportsLeaveOnlyOrphansThatAreCleanedUp() = runTest {
         val kept = scanned(16)
         // Files written but the database rows never committed (process killed in between).

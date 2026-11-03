@@ -43,6 +43,13 @@ class SettingsPersistenceTest {
     }
 
     @Test
+    fun receiptImagesAreKeptByDefaultAndTheChoiceSurvivesRestart() {
+        assertEquals(true, SharedPreferencesSettingsRepository(context).keepReceiptImages.value)
+        SharedPreferencesSettingsRepository(context).setKeepReceiptImages(false)
+        assertEquals(false, SharedPreferencesSettingsRepository(context).keepReceiptImages.value)
+    }
+
+    @Test
     fun unknownStoredValueFallsBackToSystem() {
         context.getSharedPreferences(SharedPreferencesSettingsRepository.FILE_NAME, Context.MODE_PRIVATE)
             .edit().putString("theme_mode", "PURPLE").commit()

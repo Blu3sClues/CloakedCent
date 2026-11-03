@@ -58,6 +58,10 @@ interface CategoryRepository {
 interface SettingsRepository {
     val themeMode: StateFlow<ThemeMode>
     fun setThemeMode(mode: ThemeMode)
+
+    /** When false, a receipt's page images are deleted once it is confirmed. */
+    val keepReceiptImages: StateFlow<Boolean>
+    fun setKeepReceiptImages(keep: Boolean)
 }
 
 interface PayeeRepository {

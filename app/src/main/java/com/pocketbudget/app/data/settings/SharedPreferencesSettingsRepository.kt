@@ -25,6 +25,14 @@ class SharedPreferencesSettingsRepository(context: Context) : SettingsRepository
         _themeMode.value = mode
     }
 
+    private val _keepReceiptImages = MutableStateFlow(prefs.getBoolean(KEY_KEEP_RECEIPT_IMAGES, true))
+    override val keepReceiptImages: StateFlow<Boolean> = _keepReceiptImages.asStateFlow()
+
+    override fun setKeepReceiptImages(keep: Boolean) {
+        prefs.edit(commit = true) { putBoolean(KEY_KEEP_RECEIPT_IMAGES, keep) }
+        _keepReceiptImages.value = keep
+    }
+
     private fun readThemeMode(): ThemeMode =
         prefs.getString(KEY_THEME, null)
             ?.let { stored -> ThemeMode.entries.firstOrNull { it.name == stored } }
@@ -33,5 +41,6 @@ class SharedPreferencesSettingsRepository(context: Context) : SettingsRepository
     companion object {
         const val FILE_NAME = "pocket_budget_settings"
         private const val KEY_THEME = "theme_mode"
+        private const val KEY_KEEP_RECEIPT_IMAGES = "keep_receipt_images"
     }
 }

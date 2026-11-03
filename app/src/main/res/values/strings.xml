@@ -123,6 +123,13 @@
     <string name="account_type_other">Other</string>
     <string name="settings_title">Settings</string>
     <string name="settings_theme">Theme</string>
+    <string name="settings_receipts">Receipts</string>
+    <string name="settings_keep_receipt_images">Keep receipt images</string>
+    <string name="settings_keep_receipt_images_on">The photo or PDF is kept with each receipt after you confirm it.</string>
+    <string name="settings_keep_receipt_images_off">The image is deleted when you confirm a receipt. Its details, items and prices are kept.</string>
+    <string name="settings_keep_receipt_images_confirm_title">Stop keeping receipt images?</string>
+    <string name="settings_keep_receipt_images_confirm_body">Each receipt\'s image will be permanently deleted when you confirm it. Its details, items and prices are still saved.\n\nDuplicate detection compares images, so if you scan a receipt again after its image has been deleted, Pocket Budget will not warn you that it is a duplicate.\n\nImages of receipts you have already confirmed are not affected.</string>
+    <string name="settings_keep_receipt_images_confirm_action">Turn off</string>
     <string name="theme_system">System default</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
