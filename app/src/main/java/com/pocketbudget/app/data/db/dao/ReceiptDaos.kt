@@ -65,6 +65,12 @@ data class PriceRow(
     @ColumnInfo(name = "normalized_millicents") val normalizedMillicents: Long?,
 )
 
+/** Price observation `p` whose receipt has not been deleted. */
+private const val FROM_LIVE_RECEIPT = """
+    EXISTS (SELECT 1 FROM receipt_items i JOIN receipts r ON r.id = i.receipt_id
+        WHERE i.id = p.receipt_item_id AND r.status <> 'DELETED')
+"""
+
 @Dao
 interface ReceiptDao {
     @Insert
@@ -86,20 +92,29 @@ interface ReceiptDao {
     @Query("SELECT * FROM receipts WHERE id = :id")
     fun observeBundle(id: Long): Flow<ReceiptBundle?>
 
-    @Query("SELECT * FROM receipts WHERE status <> 'DISCARDED' ORDER BY created_at DESC")
+    @Query("SELECT * FROM receipts WHERE status NOT IN ('DISCARDED', 'DELETED') ORDER BY created_at DESC")
     fun observeVisible(): Flow<List<ReceiptEntity>>
 
     @Query("SELECT * FROM receipts WHERE transaction_id = :transactionId")
     suspend fun getByTransaction(transactionId: Long): ReceiptEntity?
 
-    @Query("SELECT id FROM receipts WHERE transaction_id = :transactionId")
+    @Query("SELECT id FROM receipts WHERE transaction_id = :transactionId AND status <> 'DELETED'")
     fun observeIdForTransaction(transactionId: Long): Flow<Long?>
+
+    /** Whether the receipt's linked expense has been deleted. */
+    @Query(
+        """
+        SELECT EXISTS(SELECT 1 FROM receipts r JOIN transactions t ON t.id = r.transaction_id
+            WHERE r.id = :id AND t.is_deleted = 1)
+        """,
+    )
+    fun observeExpenseDeleted(id: Long): Flow<Boolean>
 
     /** Other live receipts with the same store, date and total, or the same receipt number at that store. */
     @Query(
         """
         SELECT id FROM receipts
-        WHERE id <> :id AND status <> 'DISCARDED' AND store_name <> '' AND store_name = :storeName COLLATE NOCASE
+        WHERE id <> :id AND status NOT IN ('DISCARDED', 'DELETED') AND store_name <> '' AND store_name = :storeName COLLATE NOCASE
             AND ((purchased_on = :purchasedOn AND total_cents = :totalCents)
                 OR (receipt_number <> '' AND receipt_number = :receiptNumber))
         """,
@@ -135,7 +150,7 @@ interface ReceiptDao {
     @Query(
         """
         SELECT i.receipt_id, i.source_sha256, i.perceptual_hash FROM receipt_images i
-        JOIN receipts r ON r.id = i.receipt_id WHERE r.status <> 'DISCARDED'
+        JOIN receipts r ON r.id = i.receipt_id WHERE r.status NOT IN ('DISCARDED', 'DELETED')
         """,
     )
     suspend fun getLiveImageHashes(): List<ImageHashRow>
@@ -235,7 +250,7 @@ interface ReceiptDao {
         SELECT p.product_id, p.store_id, s.name AS store_name, p.observed_on, p.quantity_milli, p.unit,
             p.paid_cents, p.normalized_dimension, p.normalized_millicents
         FROM price_observations p JOIN stores s ON s.id = p.store_id
-        WHERE p.product_id = :productId ORDER BY p.observed_on DESC, p.id DESC
+        WHERE p.product_id = :productId AND $FROM_LIVE_RECEIPT ORDER BY p.observed_on DESC, p.id DESC
         """,
     )
     fun observePrices(productId: Long): Flow<List<PriceRow>>
@@ -245,6 +260,7 @@ interface ReceiptDao {
         SELECT p.product_id, p.store_id, s.name AS store_name, p.observed_on, p.quantity_milli, p.unit,
             p.paid_cents, p.normalized_dimension, p.normalized_millicents
         FROM price_observations p JOIN stores s ON s.id = p.store_id
+        WHERE $FROM_LIVE_RECEIPT
         ORDER BY p.observed_on DESC, p.id DESC
         """,
     )

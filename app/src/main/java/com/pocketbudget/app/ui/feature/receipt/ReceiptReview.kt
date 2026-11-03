@@ -114,6 +114,7 @@ import kotlinx.coroutines.flow.map
 import com.pocketbudget.app.ui.components.AmountInput
 import com.pocketbudget.app.ui.components.BackTopBar
 import com.pocketbudget.app.ui.components.ConfirmDialog
+import com.pocketbudget.app.ui.components.LinkedDeleteDialog
 import com.pocketbudget.app.ui.components.DateField
 import com.pocketbudget.app.ui.components.MoneyField
 import com.pocketbudget.app.ui.components.MoneyText
@@ -151,6 +152,7 @@ fun receiptErrorMessage(error: Throwable): Int = when (error) {
     is ReceiptException.ExpenseUnavailable -> R.string.error_receipt_expense
     is ReceiptException.AmountDiffers -> R.string.error_receipt_amount
     is ReceiptException.NotEditable -> R.string.error_receipt_final
+    is ReceiptException.NotConfirmed -> R.string.error_receipt_not_confirmed
     is ReceiptException.NotFound -> R.string.error_not_found
     is ReceiptImageUnreadableException -> R.string.error_receipt_image
     else -> ledgerErrorMessage(error)
@@ -453,6 +455,20 @@ class ReceiptReviewViewModel(
         }
     }
 
+    /** Deletes this confirmed receipt and, when [deleteTransaction], its expense too. */
+    fun delete(deleteTransaction: Boolean) {
+        viewModelScope.launch {
+            try {
+                receipts.delete(receiptId, deleteTransaction)
+                _state.update { it.copy(done = true) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(message = receiptErrorMessage(e)) }
+            }
+        }
+    }
+
     private suspend fun refreshChecks() {
         val matches = receipts.findMatches(receiptId)
         val duplicates = receipts.duplicates(receiptId)
@@ -574,6 +590,7 @@ fun ReceiptReviewRoute(
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.done) { if (state.done) onBack() }
     var confirmDiscard by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     var confirmReread by remember { mutableStateOf(false) }
     var zoomPage by remember { mutableStateOf<Int?>(null) }
     val detail = state.detail
@@ -625,6 +642,11 @@ fun ReceiptReviewRoute(
                     }
                 }
             }
+            if (detail.status == ReceiptStatus.CONFIRMED) {
+                OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.receipt_delete), color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
     }
 
@@ -636,6 +658,28 @@ fun ReceiptReviewRoute(
             onConfirm = { confirmDiscard = false; viewModel.discard() },
             onDismiss = { confirmDiscard = false },
         )
+    }
+    if (confirmDelete && detail != null) {
+        if (detail.expenseDeleted) {
+            // Nothing linked is left to ask about.
+            ConfirmDialog(
+                title = stringResource(R.string.receipt_delete_title),
+                text = stringResource(R.string.receipt_delete_body),
+                confirmLabel = stringResource(R.string.action_delete),
+                onConfirm = { confirmDelete = false; viewModel.delete(deleteTransaction = false) },
+                onDismiss = { confirmDelete = false },
+            )
+        } else {
+            LinkedDeleteDialog(
+                title = stringResource(R.string.receipt_delete_title),
+                text = stringResource(R.string.receipt_delete_linked_body),
+                bothLabel = stringResource(R.string.action_delete_receipt_and_expense),
+                onlyLabel = stringResource(R.string.action_delete_receipt_only),
+                onBoth = { confirmDelete = false; viewModel.delete(deleteTransaction = true) },
+                onOnly = { confirmDelete = false; viewModel.delete(deleteTransaction = false) },
+                onDismiss = { confirmDelete = false },
+            )
+        }
     }
     if (confirmReread) {
         ConfirmDialog(
@@ -1073,6 +1117,9 @@ private fun ConfirmedSummary(
     if (r.discount.isPositive) SummaryRow(stringResource(R.string.field_discount), -r.discount)
     SummaryRow(stringResource(R.string.field_tax), r.tax)
     r.total?.let { SummaryRow(stringResource(R.string.field_total), it) }
+    if (detail.expenseDeleted) {
+        Text(stringResource(R.string.receipt_expense_deleted), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     detail.transactionId?.let { id ->
         OutlinedButton(onClick = { onOpenTransaction(id) }) { Text(stringResource(R.string.review_open_expense)) }
     }

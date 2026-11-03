@@ -229,8 +229,8 @@ class RoomReceiptRepository(
     }
 
     override fun observeDetail(id: Long): Flow<ReceiptDetail?> = observe { db ->
-        db.receiptDao().observeBundle(id).map { bundle ->
-            bundle ?: return@map null
+        db.receiptDao().observeBundle(id).combine(db.receiptDao().observeExpenseDeleted(id)) { bundle, expenseDeleted ->
+            bundle ?: return@combine null
             val receipt = bundle.receipt
             val items = bundle.items.sortedBy { it.position }
             val pages = bundle.images.sortedBy { it.page }
@@ -260,6 +260,7 @@ class RoomReceiptRepository(
                 transactionId = receipt.transactionId,
                 storeId = receipt.storeId,
                 ocrError = receipt.ocrError,
+                expenseDeleted = expenseDeleted,
             )
         }
     }
@@ -561,6 +562,25 @@ class RoomReceiptRepository(
             dao.deleteOcrLines(id)
             dao.deleteImages(id)
             dao.update(receipt.copy(status = ReceiptStatus.DISCARDED, updatedAt = clock.millis()))
+            imageFiles
+        }
+        // After the commit; if this is interrupted, orphan cleanup removes them.
+        withContext(ioDispatcher) { files.forEach(images::delete) }
+    }
+
+    override suspend fun delete(id: Long, deleteTransaction: Boolean) {
+        val files = write { db ->
+            val dao = db.receiptDao()
+            val receipt = dao.getById(id) ?: throw ReceiptException.NotFound()
+            if (receipt.status == ReceiptStatus.DELETED) return@write emptyList()
+            if (receipt.status != ReceiptStatus.CONFIRMED) throw ReceiptException.NotConfirmed()
+            // First, so a refused expense deletion (it has refunds) leaves the receipt untouched.
+            if (deleteTransaction) transactions.delete(receipt.transactionId!!)
+            val imageFiles = dao.getImages(id).map { it.fileName }
+            dao.deleteOcrLines(id)
+            dao.deleteImages(id)
+            // Items stay: splits, refunds and price history refer to them.
+            dao.update(receipt.copy(status = ReceiptStatus.DELETED, updatedAt = clock.millis()))
             imageFiles
         }
         // After the commit; if this is interrupted, orphan cleanup removes them.

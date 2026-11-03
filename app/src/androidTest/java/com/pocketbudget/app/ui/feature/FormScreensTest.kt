@@ -100,6 +100,32 @@ class FormScreensTest {
     }
 
     @Test
+    fun deletingAnExpenseWithAReceiptAsksAboutTheReceipt() {
+        var expenseOnly = 0
+        var withReceipt = 0
+        compose.setContent {
+            PocketBudgetTheme {
+                TransactionDetailScreen(
+                    DetailState.Loaded(detail), null, {}, {}, {}, { expenseOnly++ },
+                    receiptId = 7, onDeleteWithReceipt = { withReceipt++ },
+                )
+            }
+        }
+        compose.onNodeWithText("Delete").performScrollTo().performClick()
+        compose.onNodeWithText("This expense has a receipt", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(0 to 0, expenseOnly to withReceipt)
+
+        compose.onNodeWithText("Delete").performScrollTo().performClick()
+        compose.onNodeWithText("Delete expense only").performClick()
+        assertEquals(1 to 0, expenseOnly to withReceipt)
+
+        compose.onNodeWithText("Delete").performScrollTo().performClick()
+        compose.onNodeWithText("Delete expense and receipt").performClick()
+        assertEquals(1 to 1, expenseOnly to withReceipt)
+    }
+
+    @Test
     fun detailShowsScheduledActionAndAuditTrail() {
         compose.setContent {
             PocketBudgetTheme { TransactionDetailScreen(DetailState.Loaded(detail), null, {}, {}, {}, {}) }

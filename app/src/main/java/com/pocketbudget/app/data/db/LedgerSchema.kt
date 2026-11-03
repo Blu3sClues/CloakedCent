@@ -29,6 +29,13 @@ object LedgerSchema {
     /** Triggers whose SQL changed in a later schema version; migrations drop them so onOpen recreates them. */
     val STATUS_TRIGGERS = listOf("trg_transactions_validate_insert", "trg_transactions_validate_update")
 
+    /** Receipt triggers that learned the DELETED status in v8; dropped by that migration. */
+    val RECEIPT_DELETE_TRIGGERS = listOf(
+        "trg_receipts_final",
+        "trg_receipt_items_validate_update",
+        "trg_receipt_items_confirmed_delete",
+    )
+
     private val TRIGGERS = listOf(
         """
         CREATE TRIGGER IF NOT EXISTS trg_transactions_validate_insert
@@ -70,7 +77,8 @@ object LedgerSchema {
     /**
      * v6 rules. Splits belong to a live expense, use expense categories and never add
      * up to more than the expense; once written, they and the expense amount are fixed.
-     * A confirmed receipt is final and always points at an expense. Price history is
+     * A confirmed receipt is final and always points at an expense; since v8 its only
+     * allowed change is to DELETED, keeping that expense link. Price history is
      * append-only.
      */
     private val RECEIPT_TRIGGERS = listOf(
@@ -112,9 +120,12 @@ object LedgerSchema {
         """
         CREATE TRIGGER IF NOT EXISTS trg_receipts_final
         BEFORE UPDATE ON receipts
-        WHEN OLD.status IN ('CONFIRMED', 'DISCARDED')
+        WHEN (OLD.status IN ('CONFIRMED', 'DISCARDED', 'DELETED')
+                AND NOT (OLD.status = 'CONFIRMED' AND NEW.status = 'DELETED'
+                    AND NEW.transaction_id IS OLD.transaction_id AND NEW.total_cents IS OLD.total_cents))
+            OR (NEW.status = 'DELETED' AND OLD.status NOT IN ('CONFIRMED', 'DELETED'))
             OR (NEW.status = 'CONFIRMED' AND (NEW.transaction_id IS NULL OR NEW.total_cents IS NULL))
-            OR (NEW.status <> 'CONFIRMED' AND NEW.transaction_id IS NOT NULL)
+            OR (NEW.status NOT IN ('CONFIRMED', 'DELETED') AND NEW.transaction_id IS NOT NULL)
         BEGIN SELECT RAISE(ABORT, 'receipt is final or inconsistent'); END
         """,
         """
@@ -134,13 +145,13 @@ object LedgerSchema {
         BEFORE UPDATE ON receipt_items
         WHEN NEW.line_total_cents < 0 OR NEW.discount_cents < 0 OR NEW.discount_cents > NEW.line_total_cents
             OR NEW.quantity_milli <= 0
-            OR (SELECT status FROM receipts WHERE id = OLD.receipt_id) IN ('CONFIRMED', 'DISCARDED')
+            OR (SELECT status FROM receipts WHERE id = OLD.receipt_id) IN ('CONFIRMED', 'DISCARDED', 'DELETED')
         BEGIN SELECT RAISE(ABORT, 'receipt item violates rules'); END
         """,
         """
         CREATE TRIGGER IF NOT EXISTS trg_receipt_items_confirmed_delete
         BEFORE DELETE ON receipt_items
-        WHEN (SELECT status FROM receipts WHERE id = OLD.receipt_id) = 'CONFIRMED'
+        WHEN (SELECT status FROM receipts WHERE id = OLD.receipt_id) IN ('CONFIRMED', 'DELETED')
         BEGIN SELECT RAISE(ABORT, 'confirmed receipt items are kept'); END
         """,
         """

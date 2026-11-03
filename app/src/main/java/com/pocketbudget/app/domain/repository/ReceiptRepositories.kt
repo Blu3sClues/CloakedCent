@@ -63,6 +63,14 @@ interface ReceiptRepository {
     /** Rejects a draft and deletes its images. No financial effect. */
     suspend fun discard(id: Long)
 
+    /**
+     * Deletes a confirmed receipt: its images and OCR text are removed and it no longer
+     * appears in lists, price history or duplicate checks. Its expense keeps its category
+     * splits unless [deleteTransaction], which soft-deletes the expense in the same
+     * transaction (refused while the expense has refunds). Repeating it is harmless.
+     */
+    suspend fun delete(id: Long, deleteTransaction: Boolean)
+
     /** Deletes image files left by interrupted imports or discarded drafts. */
     suspend fun removeOrphanImages(): Int
 }

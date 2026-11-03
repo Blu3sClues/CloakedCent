@@ -94,6 +94,9 @@
     <string name="confirm_delete_title">Delete this transaction?</string>
     <string name="confirm_delete_body">It will be removed from balances and lists. A record of it stays in the audit history.</string>
     <string name="confirm_delete_transfer_body">Both sides of this transfer will be removed from balances and lists. A record stays in the audit history.</string>
+    <string name="confirm_delete_with_receipt_body">This expense has a receipt. Do you also want to delete the receipt?\n\nThe expense will be removed from balances and lists; a record of it stays in the audit history. A deleted receipt\'s images are erased and its prices leave your price history.</string>
+    <string name="action_delete_expense_and_receipt">Delete expense and receipt</string>
+    <string name="action_delete_expense_only">Delete expense only</string>
 
     <string name="audit_title">History</string>
     <string name="audit_created">Created %1$s</string>
@@ -367,6 +370,14 @@
     <string name="review_discard">Discard</string>
     <string name="review_discard_title">Discard this receipt?</string>
     <string name="review_discard_body">Its images will be deleted. No expense is recorded.</string>
+    <string name="receipt_delete">Delete receipt</string>
+    <string name="receipt_delete_title">Delete this receipt?</string>
+    <string name="receipt_delete_body">Its images are erased and its prices leave your price history. Its expense stays as it is.</string>
+    <string name="receipt_delete_linked_body">This receipt is linked to an expense. Do you also want to delete the expense?\n\nThe receipt\'s images are erased and its prices leave your price history. If you keep the expense, it stays split across the receipt\'s categories.</string>
+    <string name="action_delete_receipt_and_expense">Delete receipt and expense</string>
+    <string name="action_delete_receipt_only">Delete receipt only</string>
+    <string name="receipt_expense_deleted">The expense for this receipt has been deleted.</string>
+    <string name="error_receipt_not_confirmed">Only confirmed receipts can be deleted. Discard a draft instead.</string>
     <string name="review_saved">Draft saved</string>
     <string name="review_duplicate_same">You already have a receipt with this exact image.</string>
     <string name="review_duplicate_content">Another receipt has the same store, date and total.</string>

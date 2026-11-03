@@ -378,6 +378,54 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate7To8LetsConfirmedReceiptsBeDeletedButNothingElse() = runTest {
+        helper.createDatabase(TEST_DB, 7).apply {
+            execSQL(
+                """
+                INSERT INTO accounts (id, name, type, opening_balance_cents, include_in_totals, is_archived, created_at, updated_at)
+                VALUES (1, 'Checking', 'CHECKING', 10000, 1, 0, 0, 0)
+                """,
+            )
+            execSQL(
+                """
+                INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on,
+                    revision, is_deleted, is_adjustment, created_at, updated_at)
+                VALUES (1, 'r1', 1, 'EXPENSE', -2500, 'SPENT', 20400, 1, 0, 0, 0, 0)
+                """,
+            )
+            execSQL(
+                """
+                INSERT INTO receipts (id, request_id, status, store_name, store_address, tax_cents, discount_cents,
+                    total_cents, receipt_number, transaction_id, uncertain_fields, field_sources, created_at, updated_at)
+                VALUES (1, 'q1', 'CONFIRMED', 'Shop', '', 0, 0, 2500, '', 1, '', '', 0, 0)
+                """,
+            )
+            // The v7 rule, as an upgraded device has it: confirmed receipts never change.
+            execSQL(
+                """
+                CREATE TRIGGER trg_receipts_final BEFORE UPDATE ON receipts
+                WHEN OLD.status IN ('CONFIRMED', 'DISCARDED')
+                    OR (NEW.status = 'CONFIRMED' AND (NEW.transaction_id IS NULL OR NEW.total_cents IS NULL))
+                    OR (NEW.status <> 'CONFIRMED' AND NEW.transaction_id IS NOT NULL)
+                BEGIN SELECT RAISE(ABORT, 'receipt is final or inconsistent'); END
+                """,
+            )
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 8, true, Migrations.MIGRATION_7_8).close()
+        val db = PocketBudgetDatabaseFactory.create(context, passphrase, name = TEST_DB)
+        helper.closeWhenFinished(db)
+        val writable = db.openHelper.writableDatabase
+        // Any other change to a confirmed receipt is still refused.
+        assertTrue(runCatching { writable.execSQL("UPDATE receipts SET store_name = 'Other' WHERE id = 1") }.isFailure)
+        assertTrue(runCatching { writable.execSQL("UPDATE receipts SET status = 'DELETED', transaction_id = NULL WHERE id = 1") }.isFailure)
+        writable.execSQL("UPDATE receipts SET status = 'DELETED' WHERE id = 1")
+        // Deleted is final.
+        assertTrue(runCatching { writable.execSQL("UPDATE receipts SET status = 'CONFIRMED' WHERE id = 1") }.isFailure)
+        assertEquals(Money(7_500), RoomAccountRepository({ db }).observeBalances().first().single().current)
+    }
+
+    @Test
     fun migrateFromFirstVersionToLatest() = runTest {
         helper.createDatabase(TEST_DB, FIRST_VERSION).apply {
             execSQL(

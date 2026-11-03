@@ -3,6 +3,7 @@ package com.pocketbudget.app.ui.components
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
@@ -11,6 +12,7 @@ import com.pocketbudget.app.core.money.MoneyFormatter
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
@@ -243,5 +245,34 @@ fun ConfirmDialog(
             TextButton(onClick = onConfirm) { Text(confirmLabel, color = MaterialTheme.colorScheme.error) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+/**
+ * Confirmation for a destructive action on something with a linked record: the user
+ * chooses to include the linked record, leave it, or cancel. Labels are stacked, as
+ * they are usually too long to sit side by side.
+ */
+@Composable
+fun LinkedDeleteDialog(
+    title: String,
+    text: String,
+    bothLabel: String,
+    onlyLabel: String,
+    onBoth: () -> Unit,
+    onOnly: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(text) },
+        confirmButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = onBoth) { Text(bothLabel, color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = onOnly) { Text(onlyLabel, color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            }
+        },
     )
 }

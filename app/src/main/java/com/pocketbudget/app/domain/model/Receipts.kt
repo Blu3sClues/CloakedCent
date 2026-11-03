@@ -19,6 +19,12 @@ enum class ReceiptStatus {
 
     /** Rejected by the user; images removed. Final. */
     DISCARDED,
+
+    /**
+     * A confirmed receipt the user deleted; images and OCR text removed, hidden everywhere.
+     * Kept as a record because splits, refunds and price history refer to it. Final.
+     */
+    DELETED,
 }
 
 enum class ReceiptField { STORE, ADDRESS, DATE, TIME, SUBTOTAL, TAX, DISCOUNT, TOTAL, RECEIPT_NUMBER }
@@ -95,6 +101,8 @@ data class ReceiptDetail(
     val transactionId: Long?,
     val storeId: Long?,
     val ocrError: String?,
+    /** The linked expense was deleted; the receipt itself was kept. */
+    val expenseDeleted: Boolean = false,
 )
 
 data class ReceiptSummary(
@@ -214,6 +222,7 @@ data class ProductSummary(
 sealed class ReceiptException(message: String) : Exception(message) {
     class NotFound : ReceiptException("Receipt not found")
     class NotEditable : ReceiptException("This receipt is already confirmed or discarded")
+    class NotConfirmed : ReceiptException("Only confirmed receipts can be deleted; discard a draft instead")
     class StoreRequired : ReceiptException("Enter the store name")
     class DateRequired : ReceiptException("Enter the purchase date")
     class TotalRequired : ReceiptException("Enter a total greater than zero")

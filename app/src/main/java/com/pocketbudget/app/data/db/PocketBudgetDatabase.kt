@@ -88,6 +88,6 @@ abstract class PocketBudgetDatabase : RoomDatabase() {
         const val NAME = "pocket_budget.db"
 
         /** Current schema; backups from newer schemas are refused. */
-        const val SCHEMA_VERSION = 7
+        const val SCHEMA_VERSION = 8
     }
 }

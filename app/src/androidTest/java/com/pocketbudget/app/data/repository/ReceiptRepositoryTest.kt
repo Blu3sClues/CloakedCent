@@ -387,6 +387,89 @@ class ReceiptRepositoryTest {
     }
 
     @Test
+    fun deletingOnlyTheReceiptKeepsTheExpenseAndItsSplits() = runTest {
+        val id = scanned(18)
+        val expense = receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))
+        val splits = t.db.receiptDao().getSplits(expense).map { it.categoryId to it.amountCents }
+        val balance = balance()
+        assertEquals(2, t.db.receiptDao().observeAllPrices().first().size)
+
+        receipts.delete(id, deleteTransaction = false)
+
+        assertEquals(ReceiptStatus.DELETED, t.db.receiptDao().getById(id)!!.status)
+        assertNull(receipts.observeSummaries().first().firstOrNull { it.id == id })
+        assertNull(receipts.observeReceiptFor(expense).first())
+        assertEquals(0, dir.listFiles()!!.size)
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM receipt_ocr_lines WHERE receipt_id = $id"))
+        assertTrue(t.db.receiptDao().observeAllPrices().first().isEmpty())
+        // The expense, its balance effect and its category splits are untouched.
+        assertFalse(t.db.transactionDao().getById(expense)!!.isDeleted)
+        assertEquals(balance, balance())
+        assertEquals(splits, t.db.receiptDao().getSplits(expense).map { it.categoryId to it.amountCents })
+        // A kept expense is never offered to another receipt (it is already split).
+        val next = scanned(19)
+        assertTrue(receipts.findMatches(next).none { it.transactionId == expense })
+        // Repeating is harmless.
+        receipts.delete(id, deleteTransaction = false)
+    }
+
+    @Test
+    fun deletingTheReceiptWithItsExpenseRemovesBoth() = runTest {
+        val before = balance()
+        val id = scanned(20)
+        val expense = receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))
+        receipts.delete(id, deleteTransaction = true)
+        assertEquals(ReceiptStatus.DELETED, t.db.receiptDao().getById(id)!!.status)
+        assertTrue(t.db.transactionDao().getById(expense)!!.isDeleted)
+        assertEquals(before, balance())
+        assertEquals(0, dir.listFiles()!!.size)
+    }
+
+    @Test
+    fun aRefundedExpenseIsNotDeletedAndTheReceiptIsLeftAsItWas() = runTest {
+        val id = scanned(21)
+        val expense = receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))
+        val refunds = RoomRefundRepository({ t.db }, clock)
+        refunds.refundItem(t.db.receiptDao().getItems(id).first().id, 1_000, null, today, "refund-milk")
+
+        assertTrue(runCatching { receipts.delete(id, deleteTransaction = true) }.isFailure)
+        assertEquals(ReceiptStatus.CONFIRMED, t.db.receiptDao().getById(id)!!.status)
+        assertFalse(t.db.transactionDao().getById(expense)!!.isDeleted)
+        assertEquals(1, dir.listFiles()!!.size)
+
+        // Deleting only the receipt is allowed; the refund stays recorded against the expense.
+        receipts.delete(id, deleteTransaction = false)
+        assertEquals(ReceiptStatus.DELETED, t.db.receiptDao().getById(id)!!.status)
+        assertTrue(refunds.observeSummary(expense).first()!!.refunded.isPositive)
+    }
+
+    @Test
+    fun deletingOnlyTheExpenseKeepsTheReceipt() = runTest {
+        val id = scanned(22)
+        val expense = receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))
+        t.ledger.delete(expense)
+        val detail = receipts.observeDetail(id).first()!!
+        assertEquals(ReceiptStatus.CONFIRMED, detail.status)
+        assertTrue(detail.expenseDeleted)
+        assertEquals(1, detail.pages.size)
+        assertTrue(receipts.observeSummaries().first().any { it.id == id })
+        // It can still be deleted on its own later.
+        receipts.delete(id, deleteTransaction = false)
+        assertEquals(ReceiptStatus.DELETED, t.db.receiptDao().getById(id)!!.status)
+    }
+
+    @Test
+    fun draftsAreDiscardedNotDeleted() = runTest {
+        val id = scanned(23)
+        try {
+            receipts.delete(id, deleteTransaction = false)
+            fail("drafts are discarded instead")
+        } catch (_: ReceiptException.NotConfirmed) {
+        }
+        assertEquals(ReceiptStatus.NEEDS_REVIEW, t.db.receiptDao().getById(id)!!.status)
+    }
+
+    @Test
     fun confirmingKeepsImagesByDefault() = runTest {
         val id = scanned(17)
         receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))

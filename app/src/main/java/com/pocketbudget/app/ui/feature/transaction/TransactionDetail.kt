@@ -45,6 +45,7 @@ import com.pocketbudget.app.domain.model.TransactionType
 import com.pocketbudget.app.domain.model.RefundSummary
 import com.pocketbudget.app.domain.repository.ReceiptRepository
 import com.pocketbudget.app.domain.repository.RefundRepository
+import com.pocketbudget.app.ui.feature.receipt.receiptErrorMessage
 import com.pocketbudget.app.ui.feature.refund.RefundCard
 import com.pocketbudget.app.ui.feature.refund.RefundDialog
 import com.pocketbudget.app.ui.feature.refund.RefundError
@@ -58,10 +59,10 @@ import com.pocketbudget.app.ui.components.AmountInput
 import com.pocketbudget.app.ui.components.BackTopBar
 import com.pocketbudget.app.ui.components.MoneyField
 import com.pocketbudget.app.ui.components.ConfirmDialog
+import com.pocketbudget.app.ui.components.LinkedDeleteDialog
 import com.pocketbudget.app.ui.components.MoneyText
 import com.pocketbudget.app.ui.components.SectionHeader
 import com.pocketbudget.app.ui.components.StatusChip
-import com.pocketbudget.app.ui.components.ledgerErrorMessage
 import com.pocketbudget.app.ui.components.rememberMoneyFormatter
 import com.pocketbudget.app.ui.theme.MoneyTextStyles
 import kotlinx.coroutines.CancellationException
@@ -87,7 +88,7 @@ sealed interface DetailState {
 class TransactionDetailViewModel(
     private val id: Long,
     private val transactions: TransactionRepository,
-    receipts: ReceiptRepository? = null,
+    private val receipts: ReceiptRepository? = null,
     private val refunds: RefundRepository? = null,
 ) : ViewModel() {
 
@@ -131,6 +132,12 @@ class TransactionDetailViewModel(
     fun markCompleted(actualAmount: Money?) = act { transactions.confirm(id, actualAmount) }
     fun delete() = act { transactions.delete(id) }
 
+    /** Deletes this expense and its receipt together, atomically. */
+    fun deleteWithReceipt() = act {
+        val receipt = receiptId.value
+        if (receipt != null && receipts != null) receipts.delete(receipt, deleteTransaction = true) else transactions.delete(id)
+    }
+
     private fun act(action: suspend () -> Unit) {
         _error.value = null
         viewModelScope.launch {
@@ -139,7 +146,7 @@ class TransactionDetailViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _error.value = ledgerErrorMessage(e)
+                _error.value = receiptErrorMessage(e)
             }
         }
     }
@@ -175,6 +182,7 @@ fun TransactionDetailRoute(
     TransactionDetailScreen(
         state, error, onBack, onEdit, viewModel::markCompleted, viewModel::delete, receiptId, onOpenReceipt,
         RefundUi(refundSummary, originalId, refundError, viewModel::refund, onOpenTransaction),
+        viewModel::deleteWithReceipt,
     )
 }
 
@@ -189,6 +197,7 @@ fun TransactionDetailScreen(
     receiptId: Long? = null,
     onOpenReceipt: (Long) -> Unit = {},
     refund: RefundUi = RefundUi(),
+    onDeleteWithReceipt: () -> Unit = {},
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     var refunding by remember { mutableStateOf(false) }
@@ -278,7 +287,17 @@ fun TransactionDetailScreen(
             onDismiss = { refunding = false },
         )
     }
-    if (confirmDelete) {
+    if (confirmDelete && receiptId != null) {
+        LinkedDeleteDialog(
+            title = stringResource(R.string.confirm_delete_title),
+            text = stringResource(R.string.confirm_delete_with_receipt_body),
+            bothLabel = stringResource(R.string.action_delete_expense_and_receipt),
+            onlyLabel = stringResource(R.string.action_delete_expense_only),
+            onBoth = { confirmDelete = false; onDeleteWithReceipt() },
+            onOnly = { confirmDelete = false; onDelete() },
+            onDismiss = { confirmDelete = false },
+        )
+    } else if (confirmDelete) {
         ConfirmDialog(
             title = stringResource(R.string.confirm_delete_title),
             text = stringResource(
