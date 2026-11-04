@@ -121,6 +121,17 @@ class RecurringViewModel(
     fun pause() = act { recurring.pause(it) }
     fun resume() = act { recurring.resume(it, today) }
     fun cancel() = act { recurring.cancel(it) }
+    fun reenable() = act { recurring.reenable(it, today) }
+
+    private val _deleted = MutableStateFlow(false)
+
+    /** Set once the schedule has been erased; the detail screen then closes. */
+    val deleted: StateFlow<Boolean> = _deleted.asStateFlow()
+
+    fun delete() = act {
+        recurring.delete(it)
+        _deleted.value = true
+    }
     fun skipNext() = act { if (recurring.skipNext(it, today) == null) _message.value = R.string.recurring_nothing_to_skip }
 
     private fun act(action: suspend (Long) -> Unit) {
@@ -230,6 +241,8 @@ fun RecurringDetailRoute(
 ) {
     val schedules by viewModel.schedules.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val deleted by viewModel.deleted.collectAsStateWithLifecycle()
+    LaunchedEffect(deleted) { if (deleted) onBack() }
     RecurringDetailScreen(
         schedule = schedules?.firstOrNull { it.id == viewModel.scheduleId },
         today = viewModel.today,
@@ -240,6 +253,8 @@ fun RecurringDetailRoute(
         onResume = viewModel::resume,
         onSkip = viewModel::skipNext,
         onCancel = viewModel::cancel,
+        onReenable = viewModel::reenable,
+        onDelete = viewModel::delete,
     )
 }
 
@@ -254,8 +269,11 @@ fun RecurringDetailScreen(
     onResume: () -> Unit,
     onSkip: () -> Unit,
     onCancel: () -> Unit,
+    onReenable: () -> Unit = {},
+    onDelete: () -> Unit = {},
 ) {
     var confirmCancel by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             BackTopBar(schedule?.name ?: stringResource(R.string.recurring_title), onBack) {
@@ -284,12 +302,19 @@ fun RecurringDetailScreen(
                 OutlinedButton(onClick = { confirmCancel = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.action_cancel_schedule), color = MaterialTheme.colorScheme.error)
                 }
-            }
-            if (schedule.state == ScheduleState.ACTIVE) {
-                SectionHeader(stringResource(R.string.recurring_next_dates))
-                Recurrence.next(schedule, today.minusDays(1), 6).forEach {
-                    Text(it.format(dateFormat), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
+            } else {
+                // A cancelled schedule is either brought back or erased.
+                Text(stringResource(R.string.recurring_cancelled_body), style = MaterialTheme.typography.bodyMedium)
+                Button(onClick = onReenable, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.action_reenable_schedule)) }
+                OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.action_delete_schedule), color = MaterialTheme.colorScheme.error)
                 }
+            }
+            // Only the next occurrence; a schedule that has ended has none to show.
+            val next = if (schedule.state == ScheduleState.ACTIVE) Recurrence.next(schedule, today.minusDays(1), 1).firstOrNull() else null
+            if (next != null) {
+                SectionHeader(stringResource(R.string.recurring_next_date))
+                Text(next.format(dateFormat), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
             }
             Text(stringResource(R.string.recurring_history_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -301,6 +326,15 @@ fun RecurringDetailScreen(
             stringResource(R.string.action_cancel_schedule),
             onConfirm = { confirmCancel = false; onCancel() },
             onDismiss = { confirmCancel = false },
+        )
+    }
+    if (confirmDelete) {
+        ConfirmDialog(
+            stringResource(R.string.confirm_delete_schedule_title),
+            stringResource(R.string.confirm_delete_schedule_body),
+            stringResource(R.string.action_delete),
+            onConfirm = { confirmDelete = false; onDelete() },
+            onDismiss = { confirmDelete = false },
         )
     }
 }

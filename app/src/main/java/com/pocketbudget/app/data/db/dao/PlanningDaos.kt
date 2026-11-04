@@ -157,4 +157,18 @@ interface RecurringDao {
 
     @Query("SELECT COUNT(*) FROM recurring_occurrences WHERE schedule_id = :scheduleId")
     suspend fun countOccurrences(scheduleId: Long): Int
+
+    /**
+     * Forgets occurrences from [from] on that were withdrawn without being skipped (cancelling
+     * erases their projections but keeps the date so it is not generated), letting a
+     * re-enabled schedule generate them again.
+     */
+    @Query("DELETE FROM recurring_occurrences WHERE schedule_id = :scheduleId AND transaction_id IS NULL AND skipped = 0 AND due_date >= :from")
+    suspend fun deleteWithdrawnOccurrences(scheduleId: Long, from: LocalDate)
+
+    @Query("DELETE FROM recurring_occurrences WHERE schedule_id = :scheduleId")
+    suspend fun deleteOccurrences(scheduleId: Long)
+
+    @Query("DELETE FROM recurring_schedules WHERE id = :id")
+    suspend fun delete(id: Long)
 }

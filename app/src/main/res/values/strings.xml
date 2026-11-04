@@ -272,10 +272,15 @@
     <string name="recurring_state_paused">Paused</string>
     <string name="recurring_state_cancelled">Cancelled</string>
     <string name="recurring_nothing_to_skip">There is no upcoming occurrence to skip.</string>
-    <string name="recurring_next_dates">Next dates</string>
+    <string name="recurring_next_date">Next date</string>
     <string name="recurring_history_note">Editing this schedule never changes past or already created transactions.</string>
     <string name="action_skip_next">Skip next</string>
     <string name="action_cancel_schedule">Cancel schedule</string>
+    <string name="recurring_cancelled_body">This schedule is cancelled and creates nothing new. Re-enable it to continue from today, or delete it.</string>
+    <string name="action_reenable_schedule">Re-enable schedule</string>
+    <string name="action_delete_schedule">Delete schedule</string>
+    <string name="confirm_delete_schedule_title">Delete this schedule?</string>
+    <string name="confirm_delete_schedule_body">The schedule will be permanently erased from this device. This cannot be undone.\n\nTransactions it already created stay in your history. Backups you saved earlier still contain the schedule.</string>
     <string name="confirm_cancel_schedule_title">Cancel this schedule?</string>
     <string name="confirm_cancel_schedule_body">No new occurrences will be created, and future scheduled entries are permanently erased. This cannot be undone. Completed and overdue transactions are kept.</string>
     <string name="recurring_new_title">New recurring item</string>

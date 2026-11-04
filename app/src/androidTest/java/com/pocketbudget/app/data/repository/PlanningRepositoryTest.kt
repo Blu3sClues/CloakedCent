@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -172,6 +173,53 @@ class PlanningRepositoryTest {
         assertEquals(Money(-150_000), scheduled().single().amount)
         recurring.generateDue(LocalDate.of(2026, 12, 10))
         assertEquals(listOf(-150_000L, -175_000L), scheduled().sortedBy { it.occurredOn }.map { it.amount.cents })
+    }
+
+    @Test
+    fun aCancelledScheduleCanBeReenabledFromToday() = runTest {
+        val id = recurring.create(rent())
+        assertTrue(runCatching { recurring.reenable(id, today) }.isFailure) // only cancelled schedules
+        recurring.cancel(id)
+        assertTrue(scheduled().isEmpty())
+
+        // Re-enabled the same day: the withdrawn Nov 20 projection comes back, once.
+        recurring.reenable(id, today)
+        assertEquals(ScheduleState.ACTIVE, recurring.get(id)!!.state)
+        assertEquals(listOf(LocalDate.of(2026, 11, 20)), scheduled().map { it.occurredOn })
+        assertEquals(0, recurring.generateDue(today))
+
+        // Cancelled again (erasing the future Nov 20 projection) and re-enabled later:
+        // dates that passed while cancelled (Nov 20, Dec 20) are not created.
+        recurring.cancel(id)
+        recurring.reenable(id, LocalDate.of(2027, 1, 10))
+        assertEquals(listOf(LocalDate.of(2027, 1, 20)), scheduled().map { it.occurredOn })
+    }
+
+    @Test
+    fun aCancelledScheduleIsErasedButItsTransactionsStay() = runTest {
+        val landlord = t.payees.getOrCreate("Landlord")
+        val gym = t.payees.getOrCreate("Gym")
+        val id = recurring.create(rent().copy(payeeId = landlord))
+        val paid = scheduled().single().id
+        t.ledger.confirm(paid, null)
+        val other = recurring.create(rent().copy(name = "Gym", payeeId = gym, startDate = LocalDate.of(2027, 3, 1)))
+
+        assertTrue(runCatching { recurring.delete(id) }.isFailure) // cancel first
+        recurring.cancel(id)
+        recurring.delete(id)
+        recurring.delete(id) // repeat is harmless
+
+        assertNull(recurring.get(id))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM recurring_occurrences WHERE schedule_id = $id"))
+        // The payment it created is real history and stays, with its payee.
+        assertNotNull(t.db.transactionDao().getById(paid))
+        assertEquals(1L, t.count("SELECT COUNT(*) FROM payees WHERE id = $landlord"))
+
+        // A payee only the schedule used goes with it.
+        recurring.cancel(other)
+        recurring.delete(other)
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM recurring_schedules"))
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM payees WHERE id = $gym"))
     }
 
     @Test

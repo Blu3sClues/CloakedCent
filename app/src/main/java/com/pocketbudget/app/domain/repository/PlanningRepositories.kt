@@ -60,6 +60,19 @@ interface RecurringRepository {
     /** Stops future generation. Past and already generated transactions are kept. */
     suspend fun cancel(id: Long)
 
+    /**
+     * Makes a cancelled schedule active again from [today]. Like resuming, dates that passed
+     * while it was cancelled are not generated; upcoming ones are.
+     */
+    suspend fun reenable(id: Long, today: LocalDate)
+
+    /**
+     * Permanently erases a cancelled schedule and its occurrence records, and its payee if
+     * nothing else uses it. Transactions it already created stay as ordinary entries.
+     * Erasing one already gone does nothing.
+     */
+    suspend fun delete(id: Long)
+
     /** Skips the next occurrence (removing its scheduled projection if generated). Returns its date. */
     suspend fun skipNext(id: Long, today: LocalDate): LocalDate?
 

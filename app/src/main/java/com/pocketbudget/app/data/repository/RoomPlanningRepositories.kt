@@ -264,6 +264,30 @@ class RoomRecurringRepository(
             .forEach { transactions.delete(it.transactionId) }
     }
 
+    override suspend fun reenable(id: Long, today: LocalDate) {
+        write { db ->
+            val existing = requireSchedule(db, id)
+            if (existing.state != ScheduleState.CANCELLED) throw LedgerException.InvalidOperation("Only cancelled schedules can be re-enabled")
+            db.recurringDao().deleteWithdrawnOccurrences(id, today)
+            // Generation restarts from today: earlier dates stay missed, and dates still on
+            // record (kept or skipped) are not generated twice, as each date has one occurrence.
+            db.recurringDao().update(
+                existing.copy(state = ScheduleState.ACTIVE, generatedThrough = today.minusDays(1), updatedAt = clock.millis()),
+            )
+        }
+        generateDue(today)
+    }
+
+    override suspend fun delete(id: Long) {
+        erase { db ->
+            val existing = db.recurringDao().getById(id) ?: return@erase
+            if (existing.state != ScheduleState.CANCELLED) throw LedgerException.InvalidOperation("Cancel a schedule before deleting it")
+            db.recurringDao().deleteOccurrences(id)
+            db.recurringDao().delete(id)
+            existing.payeeId?.let { db.erasureDao().deletePayeeIfUnused(it) }
+        }
+    }
+
     override suspend fun skipNext(id: Long, today: LocalDate): LocalDate? {
         val schedule = get(id) ?: throw LedgerException.NotFound("Schedule $id")
         val pending = withContextRead { it.recurringDao().getPendingOccurrences() }
