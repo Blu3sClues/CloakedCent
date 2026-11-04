@@ -2,11 +2,13 @@ package com.pocketbudget.app.ui.feature.analysis
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,6 +21,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
@@ -34,13 +37,22 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.pocketbudget.app.R
 import com.pocketbudget.app.core.money.Money
 import com.pocketbudget.app.domain.model.AnalysisPeriod
@@ -59,6 +71,7 @@ import com.pocketbudget.app.ui.components.toUtcMillis
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlin.math.roundToInt
 
 /** Loading, loaded, or failed: every analysis screen shows one of these. */
 sealed interface AnalysisState<out T> {
@@ -70,6 +83,10 @@ sealed interface AnalysisState<out T> {
 internal val analysisDate: DateTimeFormatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
 private val shortDate: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
 private val monthLabel: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM yyyy")
+private val fullMonth: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
+
+/** Test tag of the spending trend bars. */
+const val TREND_CHART_TAG = "trend_chart"
 
 /** "+12.5%" from hundredths of a percent, using integer arithmetic only. */
 fun formatBasisPoints(basisPoints: Long): String {
@@ -243,13 +260,30 @@ fun SectionCard(title: String, content: @Composable () -> Unit) {
 private fun bucketLabel(date: LocalDate, granularity: Granularity): String =
     if (granularity == Granularity.MONTH) monthLabel.format(date) else shortDate.format(date)
 
-/** Bar chart of spending per day, week or month. Pixel positions only; amounts stay exact. */
+/** The days a trend bar covers: one date, a full month by name, or the first and last day. */
+@Composable
+private fun trendPeriodLabel(point: TrendPoint, granularity: Granularity, range: DateRange): String {
+    val days = Trends.bucketRange(point.start, granularity, range)
+    return when {
+        days.start == days.endInclusive -> analysisDate.format(days.start)
+        granularity == Granularity.MONTH && days.start == point.start && days.endInclusive.plusDays(1).dayOfMonth == 1 ->
+            fullMonth.format(days.start)
+        else -> stringResource(R.string.analysis_period_span, analysisDate.format(days.start), analysisDate.format(days.endInclusive))
+    }
+}
+
+/**
+ * Bar chart of spending per day, week or month. Pixel positions only; amounts stay exact.
+ * Tapping a bar shows its period and amount over the chart; touching anywhere else hides them.
+ */
 @Composable
 fun TrendChart(points: List<TrendPoint>, range: DateRange) {
     if (points.isEmpty()) return
     val granularity = Trends.granularity(DateRange(points.first().start, range.endInclusive))
     val max = points.maxOf { it.amount.cents }.coerceAtLeast(1)
+    var selected by remember(points) { mutableStateOf<Int?>(null) }
     val bar = MaterialTheme.colorScheme.primary
+    val dimmed = bar.copy(alpha = 0.45f)
     val track = MaterialTheme.colorScheme.surfaceVariant
     val description = pluralStringResource(
         R.plurals.analysis_chart_description,
@@ -259,14 +293,50 @@ fun TrendChart(points: List<TrendPoint>, range: DateRange) {
         bucketLabel(points.last().start, granularity),
     )
     Column {
-        Canvas(Modifier.fillMaxWidth().height(140.dp).semantics { contentDescription = description }) {
-            val slot = size.width / points.size
-            val width = (slot * 0.7f).coerceAtLeast(1f)
-            points.forEachIndexed { i, point ->
-                val height = size.height * point.amount.cents.toFloat() / max
-                val left = i * slot + (slot - width) / 2
-                drawRoundRect(track, Offset(left, 0f), Size(width, size.height), CornerRadius(3f))
-                if (height > 0f) drawRoundRect(bar, Offset(left, size.height - height), Size(width, height), CornerRadius(3f))
+        Box(Modifier.fillMaxWidth().height(140.dp)) {
+            Canvas(
+                Modifier
+                    .fillMaxSize()
+                    .testTag(TREND_CHART_TAG)
+                    .semantics { contentDescription = description }
+                    .pointerInput(points) {
+                        detectTapGestures { tap ->
+                            val index = (tap.x / (size.width.toFloat() / points.size)).toInt().coerceIn(0, points.lastIndex)
+                            selected = if (selected == index) null else index
+                        }
+                    },
+            ) {
+                val slot = size.width / points.size
+                val width = (slot * 0.7f).coerceAtLeast(1f)
+                points.forEachIndexed { i, point ->
+                    val height = size.height * point.amount.cents.toFloat() / max
+                    val left = i * slot + (slot - width) / 2
+                    drawRoundRect(track, Offset(left, 0f), Size(width, size.height), CornerRadius(3f))
+                    val color = if (selected == null || selected == i) bar else dimmed
+                    if (height > 0f) drawRoundRect(color, Offset(left, size.height - height), Size(width, height), CornerRadius(3f))
+                }
+            }
+            selected?.let { index ->
+                val point = points[index]
+                // Focusable, so any touch off the tooltip (or Back) only hides it.
+                Popup(
+                    popupPositionProvider = TrendTooltipPosition(index, points.size),
+                    onDismissRequest = { selected = null },
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    Surface(
+                        onClick = { selected = null },
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.inverseSurface,
+                        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                        shadowElevation = 2.dp,
+                    ) {
+                        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Text(trendPeriodLabel(point, granularity, range), style = MaterialTheme.typography.labelMedium)
+                            MoneyText(point.amount, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.inverseOnSurface)
+                        }
+                    }
+                }
             }
         }
         Row(Modifier.fillMaxWidth()) {
@@ -317,5 +387,14 @@ fun PriceChart(points: List<PricePoint>) {
             Text(analysisDate.format(series.first().date), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
             Text(analysisDate.format(series.last().date), style = MaterialTheme.typography.labelSmall)
         }
+    }
+}
+
+/** Places the trend tooltip at the top of the chart, centred over bar [index], inside the chart's edges. */
+private class TrendTooltipPosition(private val index: Int, private val count: Int) : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+        val centre = anchorBounds.left + anchorBounds.width * (index + 0.5f) / count
+        val maxLeft = (anchorBounds.right - popupContentSize.width).coerceAtLeast(anchorBounds.left)
+        return IntOffset((centre - popupContentSize.width / 2f).roundToInt().coerceIn(anchorBounds.left, maxLeft), anchorBounds.top)
     }
 }

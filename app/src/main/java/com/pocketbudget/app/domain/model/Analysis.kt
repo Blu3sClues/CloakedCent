@@ -120,6 +120,19 @@ object Trends {
     }
 
     /**
+     * The days a bar starting on [start] covers, cut to [range]: a week or month at either
+     * end of the range only counts the days inside it.
+     */
+    fun bucketRange(start: LocalDate, granularity: Granularity, range: DateRange): DateRange {
+        val end = when (granularity) {
+            Granularity.DAY -> start
+            Granularity.WEEK -> start.plusDays(6)
+            Granularity.MONTH -> start.plusMonths(1).minusDays(1)
+        }
+        return DateRange(maxOf(start, range.start), minOf(end, range.endInclusive))
+    }
+
+    /**
      * Buckets daily totals over [range], including empty buckets so gaps show. Ranges
      * that start before any data (All time) begin at the first day with spending.
      */

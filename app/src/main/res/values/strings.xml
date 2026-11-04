@@ -486,6 +486,7 @@
     <string name="analysis_refunds">Refunds</string>
     <string name="analysis_average_purchase">Average purchase</string>
     <string name="analysis_trend">Spending trend</string>
+    <string name="analysis_period_span">%1$s – %2$s</string>
     <string name="analysis_top_categories">Top categories</string>
     <string name="analysis_top_stores">Top stores</string>
     <string name="analysis_top_products">Top products</string>

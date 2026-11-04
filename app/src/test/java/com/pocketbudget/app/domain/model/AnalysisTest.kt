@@ -89,6 +89,18 @@ class AnalysisTest {
         assertTrue(Trends.build(DateRange(AnalysisPeriods.EARLIEST, today), emptyMap()).size == 1)
     }
 
+    @Test
+    fun aBarCoversItsBucketCutToTheRange() {
+        val range = range("2026-01-01", "2026-03-10")
+        assertEquals(range("2026-03-04", "2026-03-04"), Trends.bucketRange(d("2026-03-04"), Granularity.DAY, range))
+        assertEquals(range("2026-03-02", "2026-03-08"), Trends.bucketRange(d("2026-03-02"), Granularity.WEEK, range))
+        // The first week starts on Monday Dec 29 but only Jan 1 on counts; the last ends at the range.
+        assertEquals(range("2026-01-01", "2026-01-04"), Trends.bucketRange(d("2025-12-29"), Granularity.WEEK, range))
+        assertEquals(range("2026-03-09", "2026-03-10"), Trends.bucketRange(d("2026-03-09"), Granularity.WEEK, range))
+        assertEquals(range("2026-02-01", "2026-02-28"), Trends.bucketRange(d("2026-02-01"), Granularity.MONTH, range))
+        assertEquals(range("2026-03-01", "2026-03-10"), Trends.bucketRange(d("2026-03-01"), Granularity.MONTH, range))
+    }
+
     private val categories = listOf(
         Category(1, "Food", CategoryKind.EXPENSE, null),
         Category(2, "Groceries", CategoryKind.EXPENSE, 1),
