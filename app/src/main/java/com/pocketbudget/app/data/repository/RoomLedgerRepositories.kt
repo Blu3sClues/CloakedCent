@@ -11,12 +11,17 @@ import com.pocketbudget.app.data.db.entity.CategoryEntity
 import com.pocketbudget.app.data.db.entity.PayeeEntity
 import com.pocketbudget.app.data.db.entity.TransactionEntity
 import com.pocketbudget.app.data.db.entity.TransactionRevisionEntity
+import com.pocketbudget.app.data.db.entity.TransactionSplitEntity
 import com.pocketbudget.app.data.db.entity.TransferEntity
 import com.pocketbudget.app.domain.model.Account
 import com.pocketbudget.app.domain.model.AccountBalance
 import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.Category
 import com.pocketbudget.app.domain.model.CategoryKind
+import com.pocketbudget.app.domain.model.CategoryUsage
+import com.pocketbudget.app.domain.model.MAX_CATEGORY_DEPTH
+import com.pocketbudget.app.domain.model.depthOf
+import com.pocketbudget.app.domain.model.heightOf
 import com.pocketbudget.app.domain.model.LedgerException
 import com.pocketbudget.app.domain.model.AdjustmentKind
 import com.pocketbudget.app.domain.model.NewAdjustment
@@ -150,6 +155,34 @@ internal fun AccountBalanceRow.toDomain(): AccountBalance {
     )
 }
 
+/** Saves [new] and keeps the values it replaces as a revision in the entry's edit history. */
+internal suspend fun recordChange(
+    db: PocketBudgetDatabase,
+    old: TransactionEntity,
+    new: TransactionEntity,
+    action: RevisionAction,
+    now: Long,
+) {
+    val dao = db.transactionDao()
+    dao.insertRevision(
+        TransactionRevisionEntity(
+            transactionId = old.id,
+            revision = old.revision,
+            action = action,
+            accountId = old.accountId,
+            type = old.type,
+            amountCents = old.amountCents,
+            status = old.status,
+            occurredOn = old.occurredOn,
+            categoryId = old.categoryId,
+            payeeId = old.payeeId,
+            note = old.note,
+            recordedAt = now,
+        ),
+    )
+    dao.update(new.copy(revision = old.revision + 1, updatedAt = now))
+}
+
 class RoomCategoryRepository(
     database: () -> PocketBudgetDatabase,
     private val clock: Clock = Clock.systemUTC(),
@@ -159,7 +192,14 @@ class RoomCategoryRepository(
     override suspend fun create(name: String, kind: CategoryKind, parentId: Long?): Long = write { db ->
         val trimmed = name.trim()
         if (trimmed.isEmpty()) throw LedgerException.NameRequired()
-        if (parentId != null) requireParent(db, parentId, kind)
+        val all = categories(db)
+        if (parentId != null) {
+            requireParent(db, parentId, kind)
+            if (all.depthOf(parentId) >= MAX_CATEGORY_DEPTH) throw LedgerException.CategoryTooDeep()
+        }
+        if (all.any { it.parentId == parentId && it.kind == kind && it.name.equals(trimmed, ignoreCase = true) }) {
+            throw LedgerException.CategoryNameTaken()
+        }
         db.categoryDao().insert(
             CategoryEntity(name = trimmed, kind = kind, parentId = parentId, createdAt = clock.millis()),
         )
@@ -176,6 +216,8 @@ class RoomCategoryRepository(
                 if (ancestor == id) throw LedgerException.InvalidOperation("Category cannot be nested inside itself")
                 ancestor = dao.getById(ancestor)?.parentId
             }
+            val all = categories(db)
+            if (all.depthOf(parentId) + all.heightOf(id) > MAX_CATEGORY_DEPTH) throw LedgerException.CategoryTooDeep()
         }
         dao.setParent(id, parentId)
     }
@@ -184,6 +226,71 @@ class RoomCategoryRepository(
         observe { it.categoryDao().observeAll() }.map { rows ->
             rows.map { Category(it.id, it.name, it.kind, it.parentId) }
         }
+
+    override suspend fun usage(id: Long): CategoryUsage = withContextRead { db ->
+        val ids = categories(db).withDescendants(id).toList()
+        usageOf(db, ids)
+    }
+
+    override suspend fun delete(id: Long, moveTo: Long?) = erase { db ->
+        val dao = db.categoryDao()
+        val all = categories(db)
+        // Already deleted: nothing left to do.
+        val category = all.firstOrNull { it.id == id } ?: return@erase
+        val ids = all.withDescendants(id).toList()
+        if (moveTo != null) {
+            if (moveTo in ids) throw LedgerException.InvalidOperation("Move to a category outside the one being deleted")
+            val target = dao.getById(moveTo)
+            if (target == null || target.isArchived || target.kind != category.kind) throw LedgerException.CategoryMismatch()
+        }
+        if (usageOf(db, ids).inUse && moveTo == null) throw LedgerException.CategoryInUse()
+
+        dao.markForDeletion(ids)
+        if (moveTo != null) {
+            val now = clock.millis()
+            dao.getTransactionsIn(ids).forEach { recordChange(db, it, it.copy(categoryId = moveTo), RevisionAction.UPDATE, now) }
+            // Splits are unique per category: rebuild each expense's, merging those that now share one.
+            dao.getSplitTransactionsIn(ids).forEach { transactionId ->
+                val merged = dao.getSplits(transactionId).groupBy { if (it.categoryId in ids) moveTo else it.categoryId }
+                dao.deleteUnmarkedSplits(transactionId, ids)
+                dao.deleteSplits(transactionId)
+                merged.forEach { (categoryId, splits) ->
+                    dao.insertSplit(
+                        TransactionSplitEntity(
+                            transactionId = transactionId,
+                            categoryId = categoryId,
+                            amountCents = splits.sumOf { it.amountCents },
+                            receiptId = splits.firstNotNullOfOrNull { it.receiptId },
+                            createdAt = splits.minOf { it.createdAt },
+                        ),
+                    )
+                }
+            }
+            dao.moveRefundAllocations(ids, moveTo)
+            dao.moveBudgets(ids, moveTo, now)
+            dao.moveRecurring(ids, moveTo, now)
+        }
+        // Receipt items and defaults follow the move, or are cleared when nothing needed moving.
+        dao.moveReceiptItems(ids, moveTo)
+        dao.moveReceiptDefaults(ids, moveTo)
+        dao.moveProductDefaults(ids, moveTo)
+        dao.movePayeeDefaults(ids, moveTo)
+        // Deepest first: a category is referenced by its sub-categories.
+        ids.sortedByDescending { all.depthOf(it) }.forEach { dao.delete(it) }
+    }
+
+    private suspend fun categories(db: PocketBudgetDatabase): List<Category> =
+        db.categoryDao().getAll().map { Category(it.id, it.name, it.kind, it.parentId) }
+
+    private suspend fun usageOf(db: PocketBudgetDatabase, ids: List<Long>): CategoryUsage {
+        val dao = db.categoryDao()
+        return CategoryUsage(
+            transactions = dao.countTransactions(ids),
+            budgets = dao.countBudgets(ids),
+            recurring = dao.countRecurring(ids),
+            subcategories = ids.size - 1,
+        )
+    }
 
     private suspend fun requireParent(db: PocketBudgetDatabase, parentId: Long, kind: CategoryKind) {
         val parent = db.categoryDao().getById(parentId)
@@ -483,27 +590,7 @@ class RoomTransactionRepository(
         old: TransactionEntity,
         new: TransactionEntity,
         action: RevisionAction,
-    ) {
-        val now = clock.millis()
-        val dao = db.transactionDao()
-        dao.insertRevision(
-            TransactionRevisionEntity(
-                transactionId = old.id,
-                revision = old.revision,
-                action = action,
-                accountId = old.accountId,
-                type = old.type,
-                amountCents = old.amountCents,
-                status = old.status,
-                occurredOn = old.occurredOn,
-                categoryId = old.categoryId,
-                payeeId = old.payeeId,
-                note = old.note,
-                recordedAt = now,
-            ),
-        )
-        dao.update(new.copy(revision = old.revision + 1, updatedAt = now))
-    }
+    ) = recordChange(db, old, new, action, clock.millis())
 
     private suspend fun legsOf(db: PocketBudgetDatabase, entry: TransactionEntity): List<TransactionEntity> =
         entry.transferId?.let { db.transactionDao().getTransferLegs(it) } ?: listOf(entry)

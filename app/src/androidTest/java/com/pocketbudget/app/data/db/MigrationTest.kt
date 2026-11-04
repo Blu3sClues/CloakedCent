@@ -522,6 +522,33 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate9To10LetsADeletedCategoryHandOverItsSplitsAndNothingElse() = runTest {
+        helper.createDatabase(TEST_DB, 9).apply {
+            execSQL("INSERT INTO accounts (id, name, type, opening_balance_cents, include_in_totals, is_archived, created_at, updated_at) VALUES (1, 'A', 'CHECKING', 10000, 1, 0, 0, 0)")
+            execSQL("INSERT INTO categories (id, name, kind, parent_id, is_archived, created_at) VALUES (7, 'Snacks', 'EXPENSE', NULL, 0, 0), (8, 'Food', 'EXPENSE', NULL, 0, 0)")
+            execSQL(
+                "INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on, category_id, revision, is_deleted, is_adjustment, created_at, updated_at) VALUES (1, 'r1', 1, 'EXPENSE', -2500, 'SPENT', 20400, 7, 1, 0, 0, 0, 0)",
+            )
+            execSQL("INSERT INTO transaction_splits (transaction_id, category_id, amount_cents, created_at) VALUES (1, 7, 2500, 0)")
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 10, true, Migrations.MIGRATION_9_10).close()
+        val db = PocketBudgetDatabaseFactory.create(context, passphrase, name = TEST_DB)
+        helper.closeWhenFinished(db)
+        val writable = db.openHelper.writableDatabase
+        // Locked as before while its category is live.
+        assertTrue(runCatching { writable.execSQL("DELETE FROM transaction_splits") }.isFailure)
+        // Once its category is being deleted, the split may be rebuilt.
+        writable.execSQL("UPDATE categories SET is_archived = 1 WHERE id = 7")
+        writable.execSQL("DELETE FROM transaction_splits")
+        assertTrue("not into a category being deleted", runCatching {
+            writable.execSQL("INSERT INTO transaction_splits (transaction_id, category_id, amount_cents, created_at) VALUES (1, 7, 2500, 0)")
+        }.isFailure)
+        writable.execSQL("INSERT INTO transaction_splits (transaction_id, category_id, amount_cents, created_at) VALUES (1, 8, 2500, 0)")
+        assertEquals(Money(7_500), RoomAccountRepository({ db }).observeBalances().first().single().current)
+    }
+
+    @Test
     fun migrateFromFirstVersionToLatest() = runTest {
         helper.createDatabase(TEST_DB, FIRST_VERSION).apply {
             execSQL(

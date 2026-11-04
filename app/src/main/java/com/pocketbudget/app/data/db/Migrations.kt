@@ -317,7 +317,18 @@ object Migrations {
         }
     }
 
+    /**
+     * v10: users manage categories. No table changes; the triggers that let a category being
+     * deleted hand its locked records to another category are dropped here and recreated on open.
+     */
+    val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            LedgerSchema.CATEGORY_TRIGGERS.forEach { db.execSQL("DROP TRIGGER IF EXISTS $it") }
+        }
+    }
+
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+        MIGRATION_9_10,
     )
 }

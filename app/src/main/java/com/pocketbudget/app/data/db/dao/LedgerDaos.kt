@@ -11,6 +11,7 @@ import com.pocketbudget.app.data.db.entity.CategoryEntity
 import com.pocketbudget.app.data.db.entity.PayeeEntity
 import com.pocketbudget.app.data.db.entity.TransactionEntity
 import com.pocketbudget.app.data.db.entity.TransactionRevisionEntity
+import com.pocketbudget.app.data.db.entity.TransactionSplitEntity
 import com.pocketbudget.app.data.db.entity.TransferEntity
 import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.RevisionAction
@@ -95,6 +96,76 @@ interface CategoryDao {
 
     @Query("SELECT * FROM categories")
     suspend fun getAll(): List<CategoryEntity>
+
+    // Usage and deletion. [ids] is always a category with all its sub-categories.
+
+    /** Transactions using the categories directly, through a receipt split, or through a refund allocation. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM transactions WHERE category_id IN (:ids)
+            OR id IN (SELECT transaction_id FROM transaction_splits WHERE category_id IN (:ids))
+            OR id IN (SELECT refund_transaction_id FROM refund_allocations WHERE category_id IN (:ids))
+        """,
+    )
+    suspend fun countTransactions(ids: List<Long>): Int
+
+    @Query("SELECT COUNT(*) FROM budgets WHERE category_id IN (:ids)")
+    suspend fun countBudgets(ids: List<Long>): Int
+
+    @Query("SELECT COUNT(*) FROM recurring_schedules WHERE category_id IN (:ids)")
+    suspend fun countRecurring(ids: List<Long>): Int
+
+    /**
+     * Marks categories for deletion (reusing is_archived, which nothing else sets). The
+     * triggers allow moving locked records — splits, refund allocations, confirmed
+     * receipts and their items — away from marked categories only. Marked categories are
+     * deleted in the same transaction.
+     */
+    @Query("UPDATE categories SET is_archived = 1 WHERE id IN (:ids)")
+    suspend fun markForDeletion(ids: List<Long>)
+
+    @Query("SELECT * FROM transactions WHERE category_id IN (:ids)")
+    suspend fun getTransactionsIn(ids: List<Long>): List<TransactionEntity>
+
+    @Query("SELECT DISTINCT transaction_id FROM transaction_splits WHERE category_id IN (:ids)")
+    suspend fun getSplitTransactionsIn(ids: List<Long>): List<Long>
+
+    @Query("SELECT * FROM transaction_splits WHERE transaction_id = :transactionId")
+    suspend fun getSplits(transactionId: Long): List<TransactionSplitEntity>
+
+    /** Unmarked splits first: the delete trigger allows them only while a marked split remains. */
+    @Query("DELETE FROM transaction_splits WHERE transaction_id = :transactionId AND category_id NOT IN (:ids)")
+    suspend fun deleteUnmarkedSplits(transactionId: Long, ids: List<Long>)
+
+    @Query("DELETE FROM transaction_splits WHERE transaction_id = :transactionId")
+    suspend fun deleteSplits(transactionId: Long)
+
+    @Insert
+    suspend fun insertSplit(split: TransactionSplitEntity): Long
+
+    @Query("UPDATE refund_allocations SET category_id = :to WHERE category_id IN (:ids)")
+    suspend fun moveRefundAllocations(ids: List<Long>, to: Long)
+
+    @Query("UPDATE receipt_items SET category_id = :to WHERE category_id IN (:ids)")
+    suspend fun moveReceiptItems(ids: List<Long>, to: Long?)
+
+    @Query("UPDATE receipts SET default_category_id = :to WHERE default_category_id IN (:ids)")
+    suspend fun moveReceiptDefaults(ids: List<Long>, to: Long?)
+
+    @Query("UPDATE products SET default_category_id = :to WHERE default_category_id IN (:ids)")
+    suspend fun moveProductDefaults(ids: List<Long>, to: Long?)
+
+    @Query("UPDATE payees SET default_category_id = :to WHERE default_category_id IN (:ids)")
+    suspend fun movePayeeDefaults(ids: List<Long>, to: Long?)
+
+    @Query("UPDATE budgets SET category_id = :to, updated_at = :now WHERE category_id IN (:ids)")
+    suspend fun moveBudgets(ids: List<Long>, to: Long, now: Long)
+
+    @Query("UPDATE recurring_schedules SET category_id = :to, updated_at = :now WHERE category_id IN (:ids)")
+    suspend fun moveRecurring(ids: List<Long>, to: Long, now: Long)
+
+    @Query("DELETE FROM categories WHERE id = :id")
+    suspend fun delete(id: Long)
 }
 
 @Dao

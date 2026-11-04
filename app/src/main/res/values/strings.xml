@@ -62,6 +62,9 @@
     <string name="error_not_found">This record could not be found.</string>
     <string name="error_adjustment_kind">Increases can be income or balance-only; decreases can be expense or balance-only.</string>
     <string name="error_not_allowed">This change isn\'t allowed.</string>
+    <string name="error_category_too_deep">Categories can only be nested three levels deep.</string>
+    <string name="error_category_name_taken">There is already a category with this name here.</string>
+    <string name="error_category_in_use">This category is still in use. Move what uses it to another category first.</string>
     <string name="error_unexpected">Something went wrong. Nothing was saved.</string>
 
     <string name="account_new_title">New account</string>
@@ -126,6 +129,43 @@
     <string name="account_type_other">Other</string>
     <string name="settings_title">Settings</string>
     <string name="settings_theme">Theme</string>
+    <string name="settings_categories">Categories</string>
+    <string name="settings_categories_body">Create, nest and delete the categories you sort income and spending into.</string>
+    <string name="categories_title">Categories</string>
+    <string name="categories_intro">Categories can hold sub-categories, up to %1$d levels deep. A category can only be deleted once nothing uses it, so anything that does is moved to another category first.</string>
+    <string name="categories_expense">Expense categories</string>
+    <string name="categories_income">Income categories</string>
+    <string name="categories_empty">No categories yet.</string>
+    <string name="categories_name">Name</string>
+    <string name="categories_new_expense_title">New expense category</string>
+    <string name="categories_new_income_title">New income category</string>
+    <string name="categories_new_sub_title">New sub-category of “%1$s”</string>
+    <string name="categories_add_sub_to">Add a sub-category to %1$s</string>
+    <string name="categories_delete_named">Delete %1$s</string>
+    <string name="categories_delete_title">Delete “%1$s”?</string>
+    <string name="categories_erased">It will be permanently erased from this device. This cannot be undone.</string>
+    <plurals name="categories_erased_with_subs">
+        <item quantity="one">It will be permanently erased from this device, along with its %1$d sub-category. This cannot be undone.</item>
+        <item quantity="other">It will be permanently erased from this device, along with its %1$d sub-categories. This cannot be undone.</item>
+    </plurals>
+    <string name="categories_in_use_body">This category is used by %1$s. To delete it, choose another category to move everything to. Each moved transaction records the change in its edit history.\n\nIf you cancel, nothing is moved or deleted.</string>
+    <string name="categories_in_use_with_subs_body">This category and its sub-categories are used by %1$s. To delete them, choose another category to move everything to. Each moved transaction records the change in its edit history.\n\nIf you cancel, nothing is moved or deleted.</string>
+    <string name="categories_usage_join">%1$s and %2$s</string>
+    <plurals name="categories_usage_transactions">
+        <item quantity="one">%1$d transaction</item>
+        <item quantity="other">%1$d transactions</item>
+    </plurals>
+    <plurals name="categories_usage_budgets">
+        <item quantity="one">%1$d budget</item>
+        <item quantity="other">%1$d budgets</item>
+    </plurals>
+    <plurals name="categories_usage_recurring">
+        <item quantity="one">%1$d recurring item</item>
+        <item quantity="other">%1$d recurring items</item>
+    </plurals>
+    <string name="categories_move_to">Move everything to</string>
+    <string name="categories_move_and_delete">Move and delete</string>
+    <string name="categories_no_target">There is no other category of this kind to move them to. Create one first.</string>
     <string name="settings_receipts">Receipts</string>
     <string name="settings_keep_receipt_images">Keep receipt images</string>
     <string name="settings_keep_receipt_images_on">The photo or PDF is kept with each receipt after you confirm it.</string>

@@ -6,6 +6,7 @@ import com.pocketbudget.app.domain.model.AccountBalance
 import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.Category
 import com.pocketbudget.app.domain.model.CategoryKind
+import com.pocketbudget.app.domain.model.CategoryUsage
 import com.pocketbudget.app.domain.model.NewTransaction
 import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.Payee
@@ -79,6 +80,10 @@ class FakeLedger {
         override suspend fun create(name: String, kind: CategoryKind, parentId: Long?) = 0L
         override suspend fun setParent(id: Long, parentId: Long?) = Unit
         override fun observeAll(): Flow<List<Category>> = categories
+        override suspend fun usage(id: Long) = CategoryUsage(0, 0, 0, 0)
+        override suspend fun delete(id: Long, moveTo: Long?) {
+            categories.value = categories.value.filterNot { it.id == id }
+        }
     }
 
     val payeeRepository = object : PayeeRepository {

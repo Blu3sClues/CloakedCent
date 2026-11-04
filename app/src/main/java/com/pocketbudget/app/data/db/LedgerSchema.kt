@@ -56,8 +56,27 @@ object LedgerSchema {
         "trg_refund_allocations_immutable_delete",
     )
 
+    /**
+     * Triggers rewritten in v10 so that deleting a category can move locked records (receipt
+     * splits, refund allocations, confirmed receipts and their items) to another category;
+     * dropped by that migration and recreated on open.
+     */
+    val CATEGORY_TRIGGERS = listOf(
+        "trg_splits_validate_insert",
+        "trg_splits_immutable_delete",
+        "trg_receipts_final",
+        "trg_receipt_items_validate_update",
+        "trg_refund_allocations_immutable_update",
+    )
+
     /** Transaction `id` (an SQL expression) is marked for erasure. */
     private fun marked(id: String) = "EXISTS (SELECT 1 FROM transactions WHERE id = $id AND is_deleted = 1)"
+
+    /** Category `id` (an SQL expression) is being deleted (see CategoryDao.markForDeletion). */
+    private fun categoryBeingDeleted(id: String) = "EXISTS (SELECT 1 FROM categories WHERE id = $id AND is_archived = 1)"
+
+    /** Category `id` (an SQL expression) exists and is not being deleted. */
+    private fun liveCategory(id: String) = "EXISTS (SELECT 1 FROM categories WHERE id = $id AND is_archived = 0)"
 
     /** Receipt item `id` (an SQL expression) belongs to a receipt marked for erasure. */
     private fun itemBeingErased(id: String) = """
@@ -119,7 +138,7 @@ object LedgerSchema {
         WHEN NEW.amount_cents <= 0
             OR NOT EXISTS (SELECT 1 FROM transactions t WHERE t.id = NEW.transaction_id
                 AND t.type = 'EXPENSE' AND t.is_deleted = 0)
-            OR NOT EXISTS (SELECT 1 FROM categories c WHERE c.id = NEW.category_id AND c.kind = 'EXPENSE')
+            OR NOT EXISTS (SELECT 1 FROM categories c WHERE c.id = NEW.category_id AND c.kind = 'EXPENSE' AND c.is_archived = 0)
             OR (SELECT COALESCE(SUM(amount_cents), 0) FROM transaction_splits
                 WHERE transaction_id = NEW.transaction_id) + NEW.amount_cents
                 > (SELECT -amount_cents FROM transactions WHERE id = NEW.transaction_id)
@@ -137,6 +156,9 @@ object LedgerSchema {
         CREATE TRIGGER IF NOT EXISTS trg_splits_immutable_delete
         BEFORE DELETE ON transaction_splits
         WHEN NOT ${marked("OLD.transaction_id")}
+            -- An expense split into a category being deleted has its splits rebuilt.
+            AND NOT EXISTS (SELECT 1 FROM transaction_splits s JOIN categories c ON c.id = s.category_id
+                WHERE s.transaction_id = OLD.transaction_id AND c.is_archived = 1)
         BEGIN SELECT RAISE(ABORT, 'splits are immutable'); END
         """,
         """
@@ -160,7 +182,10 @@ object LedgerSchema {
                 (NEW.status = 'DELETED' AND NEW.transaction_id IS OLD.transaction_id
                     AND NEW.total_cents IS OLD.total_cents)
                 OR (NEW.status = 'CONFIRMED' AND NEW.transaction_id IS NULL
-                    AND NEW.total_cents IS OLD.total_cents AND ${marked("OLD.transaction_id")})))
+                    AND NEW.total_cents IS OLD.total_cents AND ${marked("OLD.transaction_id")})
+                OR (NEW.status = 'CONFIRMED' AND NEW.transaction_id IS OLD.transaction_id
+                    AND NEW.total_cents IS OLD.total_cents AND ${categoryBeingDeleted("OLD.default_category_id")}
+                    AND (NEW.default_category_id IS NULL OR ${liveCategory("NEW.default_category_id")}))))
             OR (NEW.status = 'DELETED' AND OLD.status <> 'CONFIRMED')
             OR (NEW.status = 'CONFIRMED' AND OLD.status <> 'CONFIRMED'
                 AND (NEW.transaction_id IS NULL OR NEW.total_cents IS NULL))
@@ -185,7 +210,13 @@ object LedgerSchema {
         BEFORE UPDATE ON receipt_items
         WHEN NEW.line_total_cents < 0 OR NEW.discount_cents < 0 OR NEW.discount_cents > NEW.line_total_cents
             OR NEW.quantity_milli <= 0
-            OR (SELECT status FROM receipts WHERE id = OLD.receipt_id) IN ('CONFIRMED', 'DISCARDED', 'DELETED')
+            OR ((SELECT status FROM receipts WHERE id = OLD.receipt_id) IN ('CONFIRMED', 'DISCARDED', 'DELETED')
+                -- A final item may only move away from a category being deleted.
+                AND NOT (${categoryBeingDeleted("OLD.category_id")}
+                    AND (NEW.category_id IS NULL OR ${liveCategory("NEW.category_id")})
+                    AND NEW.line_total_cents = OLD.line_total_cents AND NEW.discount_cents = OLD.discount_cents
+                    AND NEW.quantity_milli = OLD.quantity_milli AND NEW.product_id IS OLD.product_id
+                    AND NEW.description = OLD.description AND NEW.raw_text = OLD.raw_text))
         BEGIN SELECT RAISE(ABORT, 'receipt item violates rules'); END
         """,
         """
@@ -269,6 +300,10 @@ object LedgerSchema {
         WHEN NOT (NEW.receipt_item_id IS NULL AND NEW.item_net_cents IS NULL AND NEW.quantity_milli IS NULL
             AND NEW.refund_transaction_id = OLD.refund_transaction_id AND NEW.category_id IS OLD.category_id
             AND NEW.amount_cents = OLD.amount_cents AND ${itemBeingErased("OLD.receipt_item_id")})
+            AND NOT (${categoryBeingDeleted("OLD.category_id")} AND ${liveCategory("NEW.category_id")}
+                AND NEW.refund_transaction_id = OLD.refund_transaction_id AND NEW.amount_cents = OLD.amount_cents
+                AND NEW.receipt_item_id IS OLD.receipt_item_id AND NEW.item_net_cents IS OLD.item_net_cents
+                AND NEW.quantity_milli IS OLD.quantity_milli)
         BEGIN SELECT RAISE(ABORT, 'refund allocations are immutable'); END
         """,
         """

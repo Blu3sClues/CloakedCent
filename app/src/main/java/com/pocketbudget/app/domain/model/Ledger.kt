@@ -45,6 +45,37 @@ enum class CategoryKind { INCOME, EXPENSE }
 
 data class Category(val id: Long, val name: String, val kind: CategoryKind, val parentId: Long?)
 
+/** Categories nest at most this many levels: category › sub-category › sub-sub-category. */
+const val MAX_CATEGORY_DEPTH = 3
+
+/** Level of [id] in the tree: 1 for a top-level category. */
+fun List<Category>.depthOf(id: Long): Int {
+    val byId = associateBy { it.id }
+    return generateSequence(byId[id]) { it.parentId?.let(byId::get) }.count()
+}
+
+/** Levels in the subtree rooted at [id], counting [id] itself: 1 for a category without children. */
+fun List<Category>.heightOf(id: Long): Int {
+    val children = groupBy { it.parentId }
+    fun height(node: Long): Int = 1 + (children[node]?.maxOfOrNull { height(it.id) } ?: 0)
+    return height(id)
+}
+
+/**
+ * What uses a category and its sub-categories. Anything counted here must be moved to
+ * another category before the category can be deleted.
+ */
+data class CategoryUsage(
+    /** Distinct transactions, including those split by a receipt or refunded into it. */
+    val transactions: Int,
+    val budgets: Int,
+    val recurring: Int,
+    /** Sub-categories at any depth, deleted along with it. */
+    val subcategories: Int,
+) {
+    val inUse: Boolean get() = transactions > 0 || budgets > 0 || recurring > 0
+}
+
 enum class PayeeType { PERSON, MERCHANT }
 
 enum class TransactionType {
@@ -265,5 +296,8 @@ sealed class LedgerException(message: String) : Exception(message) {
     class AdjustmentKindMismatch :
         LedgerException("Increases can be income or balance-only; decreases can be expense or balance-only")
     class NotFound(what: String) : LedgerException("$what not found")
+    class CategoryTooDeep : LedgerException("Categories can be nested at most $MAX_CATEGORY_DEPTH levels deep")
+    class CategoryNameTaken : LedgerException("A category with this name already exists here")
+    class CategoryInUse : LedgerException("Move this category's transactions to another category before deleting it")
     class InvalidOperation(message: String) : LedgerException(message)
 }

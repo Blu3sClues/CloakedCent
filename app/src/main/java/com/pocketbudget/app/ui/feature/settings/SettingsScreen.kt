@@ -90,6 +90,7 @@ fun SettingsRoute(
     onBackup: () -> Unit = {},
     onRestore: () -> Unit = {},
     onLicences: () -> Unit = {},
+    onCategories: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory),
 ) {
     val mode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -105,6 +106,7 @@ fun SettingsRoute(
         onLicences,
         keepReceiptImages,
         viewModel::setKeepReceiptImages,
+        onCategories,
     )
 }
 
@@ -119,6 +121,7 @@ fun SettingsScreen(
     onLicences: () -> Unit = {},
     keepReceiptImages: Boolean = true,
     onKeepReceiptImagesChange: (Boolean) -> Unit = {},
+    onCategories: () -> Unit = {},
 ) {
     Scaffold(topBar = { BackTopBar(stringResource(R.string.settings_title), onBack) }) { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -141,6 +144,9 @@ fun SettingsScreen(
                     }
                 }
             }
+            SectionHeader(stringResource(R.string.settings_categories))
+            Text(stringResource(R.string.settings_categories_body), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 8.dp))
+            OutlinedButton(onClick = onCategories, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.categories_title)) }
             SectionHeader(stringResource(R.string.settings_receipts))
             var confirmingImageDeletion by rememberSaveable { mutableStateOf(false) }
             Row(

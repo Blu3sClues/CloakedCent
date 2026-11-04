@@ -9,6 +9,7 @@ import com.pocketbudget.app.domain.model.TransactionFilter
 import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.Category
 import com.pocketbudget.app.domain.model.CategoryKind
+import com.pocketbudget.app.domain.model.CategoryUsage
 import com.pocketbudget.app.domain.model.NewAdjustment
 import com.pocketbudget.app.domain.model.NewTransaction
 import com.pocketbudget.app.domain.model.NewTransfer
@@ -46,13 +47,27 @@ interface AccountRepository {
 }
 
 interface CategoryRepository {
-    /** [parentId] nests the category; the parent must have the same [kind]. */
+    /**
+     * [parentId] nests the category; the parent must have the same [kind], and nesting is
+     * limited to MAX_CATEGORY_DEPTH levels. Names are unique among siblings.
+     */
     suspend fun create(name: String, kind: CategoryKind, parentId: Long? = null): Long
 
-    /** Re-parents a category, rejecting cycles and kind mismatches. */
+    /** Re-parents a category, rejecting cycles, kind mismatches and nesting too deep. */
     suspend fun setParent(id: Long, parentId: Long?)
 
     fun observeAll(): Flow<List<Category>>
+
+    /** What uses the category and its sub-categories. */
+    suspend fun usage(id: Long): CategoryUsage
+
+    /**
+     * Permanently erases the category with all its sub-categories. While anything uses
+     * them (see CategoryUsage.inUse) [moveTo] is required: everything is first moved to
+     * that category, which must be of the same kind and outside the deleted subtree.
+     * Moved transactions record the change in their edit history.
+     */
+    suspend fun delete(id: Long, moveTo: Long? = null)
 }
 
 interface SettingsRepository {

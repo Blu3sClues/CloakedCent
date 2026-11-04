@@ -22,6 +22,7 @@ import com.pocketbudget.app.ui.feature.history.HistoryRoute
 import com.pocketbudget.app.ui.feature.history.HistoryViewModel
 import com.pocketbudget.app.ui.feature.backup.BackupRoute
 import com.pocketbudget.app.ui.feature.settings.AcknowledgementsRoute
+import com.pocketbudget.app.ui.feature.settings.CategoriesRoute
 import com.pocketbudget.app.ui.feature.settings.SettingsRoute
 import com.pocketbudget.app.ui.feature.budget.ARG_BUDGET_ID
 import com.pocketbudget.app.ui.feature.budget.BudgetDetailRoute
@@ -60,6 +61,7 @@ internal object Routes {
     const val BACKUP = "backup"
     const val RESTORE = "restore"
     const val LICENCES = "licences"
+    const val CATEGORIES = "categories"
     const val BUDGETS = "budgets"
     const val BUDGET = "budget/{$ARG_BUDGET_ID}"
     const val BUDGET_EDIT = "budget-edit?$ARG_BUDGET_ID={$ARG_BUDGET_ID}"
@@ -203,11 +205,13 @@ fun PocketBudgetNavHost() {
                     onBackup = { nav.navigate(Routes.BACKUP) },
                     onRestore = { nav.navigate(Routes.RESTORE) },
                     onLicences = { nav.navigate(Routes.LICENCES) },
+                    onCategories = { nav.navigate(Routes.CATEGORIES) },
                 )
             }
             composable(Routes.BACKUP) { BackupRoute(restore = false, onBack = back) }
             composable(Routes.RESTORE) { BackupRoute(restore = true, onBack = back) }
             composable(Routes.LICENCES) { AcknowledgementsRoute(onBack = back) }
+            composable(Routes.CATEGORIES) { CategoriesRoute(onBack = back) }
             composable(Routes.BUDGETS) {
                 BudgetsRoute(onBack = null, onOpen = { nav.navigate(Routes.budget(it)) }, onAdd = { nav.navigate(Routes.budgetEdit(null)) })
             }
