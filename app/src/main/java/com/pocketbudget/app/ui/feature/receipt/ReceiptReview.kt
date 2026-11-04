@@ -710,7 +710,10 @@ private fun PageStrip(state: ReviewUiState, detail: ReceiptDetail, onOpen: (Int)
     }
 }
 
-/** The page with low-confidence lines outlined and the focused field's source filled. */
+/**
+ * The page with low-confidence lines outlined and the focused field's source filled while it is
+ * reviewed. A confirmed receipt shows the page alone (its reading is erased on confirming).
+ */
 @Composable
 private fun PageWithBoxes(image: ImageBitmap, detail: ReceiptDetail, index: Int, highlight: OcrSource?, modifier: Modifier) {
     val page = detail.pages.getOrNull(index) ?: return
@@ -718,6 +721,7 @@ private fun PageWithBoxes(image: ImageBitmap, detail: ReceiptDetail, index: Int,
     val focusColor = MaterialTheme.colorScheme.primary
     Box(modifier.aspectRatio(image.width.toFloat() / image.height)) {
         Image(image, null, Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+        if (detail.status == ReceiptStatus.CONFIRMED) return@Box
         Canvas(Modifier.fillMaxSize()) {
             val scale = size.width / page.width
             detail.ocrLines.filter { it.page == page.page && it.box != null }.forEach { line ->

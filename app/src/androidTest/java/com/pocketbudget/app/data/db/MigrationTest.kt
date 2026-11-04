@@ -549,6 +549,47 @@ class MigrationTest {
     }
 
     @Test
+    fun migrate10To11ErasesTheReadingOfConfirmedReceiptsOnly() = runTest {
+        helper.createDatabase(TEST_DB, 10).apply {
+            listOf(
+                "INSERT INTO accounts (id, name, type, opening_balance_cents, include_in_totals, is_archived, created_at, updated_at) VALUES (1, 'A', 'CHECKING', 10000, 1, 0, 0, 0)",
+                "INSERT INTO categories (id, name, kind, parent_id, is_archived, created_at) VALUES (7, 'Food', 'EXPENSE', NULL, 0, 0)",
+                "INSERT INTO transactions (id, request_id, account_id, type, amount_cents, status, occurred_on, category_id, revision, is_deleted, is_adjustment, created_at, updated_at) VALUES (1, 'r1', 1, 'EXPENSE', -1000, 'SPENT', 20400, 7, 1, 0, 0, 0, 0)",
+                """
+                INSERT INTO receipts (id, request_id, status, store_name, store_address, tax_cents, discount_cents,
+                    total_cents, receipt_number, transaction_id, uncertain_fields, field_sources, created_at, updated_at) VALUES
+                    (1, 'q1', 'CONFIRMED', 'Kept store', '', 0, 0, 1000, '', 1, '', 'TOTAL=0:1', 0, 0),
+                    (2, 'q2', 'NEEDS_REVIEW', 'Draft shop', '', 0, 0, 100, '', NULL, '', 'TOTAL=0:1', 0, 0)
+                """,
+                """
+                INSERT INTO receipt_items (id, receipt_id, position, raw_text, description, quantity_milli, unit,
+                    line_total_cents, discount_cents, category_id, confidence, uncertain, source_page, source_line, user_verified) VALUES
+                    (1, 1, 0, 'MILK', 'Milk', 1000, 'EACH', 1000, 0, 7, 90, 0, 0, 0, 1),
+                    (2, 2, 0, 'BREAD', 'Bread', 1000, 'EACH', 100, 0, 7, 90, 0, 0, 0, 0)
+                """,
+                """
+                INSERT INTO receipt_ocr_lines (receipt_id, page, line_index, text, confidence, box_left, box_top, box_right, box_bottom) VALUES
+                    (1, 0, 0, 'MILK 10.00', 90, 0, 0, 10, 10), (1, 0, 1, 'TOTAL 10.00', 90, 0, 10, 10, 20),
+                    (2, 0, 0, 'BREAD 1.00', 90, 0, 0, 10, 10)
+                """,
+            ).forEach(::execSQL)
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 11, true, Migrations.MIGRATION_10_11).apply {
+            fun strings(sql: String) = query(sql).use { c -> generateSequence { if (c.moveToNext()) c.getString(0) else null }.toList() }
+            assertEquals("a draft keeps its reading for review", listOf("2"), strings("SELECT DISTINCT receipt_id FROM receipt_ocr_lines"))
+            assertEquals(listOf("", "TOTAL=0:1"), strings("SELECT field_sources FROM receipts ORDER BY id"))
+            assertEquals(listOf("-", "0"), strings("SELECT COALESCE(source_line, '-') FROM receipt_items ORDER BY id"))
+            assertEquals(listOf("1"), strings("SELECT COUNT(*) FROM app_metadata WHERE meta_key = '${AppMetadataKeys.VACUUM_PENDING}'"))
+            close()
+        }
+        val db = PocketBudgetDatabaseFactory.create(context, passphrase, name = TEST_DB)
+        helper.closeWhenFinished(db)
+        // The finality trigger is back: the confirmed receipt cannot be reopened.
+        assertTrue(runCatching { db.openHelper.writableDatabase.execSQL("UPDATE receipts SET status = 'NEEDS_REVIEW', transaction_id = NULL WHERE id = 1") }.isFailure)
+    }
+
+    @Test
     fun migrateFromFirstVersionToLatest() = runTest {
         helper.createDatabase(TEST_DB, FIRST_VERSION).apply {
             execSQL(

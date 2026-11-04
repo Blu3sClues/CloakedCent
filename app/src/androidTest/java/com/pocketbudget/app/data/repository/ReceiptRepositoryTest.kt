@@ -385,6 +385,23 @@ class ReceiptRepositoryTest {
     }
 
     @Test
+    fun confirmingErasesTheReadingButKeepsThePage() = runTest {
+        val id = scanned(17)
+        val before = receipts.observeDetail(id).first()!!
+        assertTrue(before.ocrLines.isNotEmpty())
+        assertTrue(before.fieldSources.isNotEmpty())
+        receipts.confirm(id, verified(id), ConfirmTarget.NewExpense(checking))
+        val detail = receipts.observeDetail(id).first()!!
+        assertTrue(detail.ocrLines.isEmpty())
+        assertTrue(detail.fieldSources.isEmpty())
+        assertTrue(detail.review.items.all { it.source == null })
+        assertEquals(0L, t.count("SELECT COUNT(*) FROM receipt_ocr_lines"))
+        // The page itself is the one that was stored on import, unchanged.
+        assertEquals(before.pages, detail.pages)
+        assertTrue(receipts.loadPage(detail.pages[0].imageId).isNotEmpty())
+    }
+
+    @Test
     fun confirmingWithoutKeepingImagesDeletesThemButKeepsTheReceipt() = runTest {
         val id = scanned(16)
         assertEquals(1, dir.listFiles()!!.size)
@@ -406,7 +423,7 @@ class ReceiptRepositoryTest {
         val splits = t.db.receiptDao().getSplits(expense).map { it.categoryId to it.amountCents }
         val balance = balance()
         val payee = t.db.transactionDao().getById(expense)!!.payeeId!!
-        assertEquals(receiptTracesOf(1) + mapOf("receipt_items" to 2L, "price_observations" to 2L, "products" to 2L, "product_aliases" to 2L, "receipt_ocr_lines" to groceryText.size.toLong()), receiptTraces())
+        assertEquals(receiptTracesOf(1) + mapOf("receipt_items" to 2L, "price_observations" to 2L, "products" to 2L, "product_aliases" to 2L, "receipt_ocr_lines" to 0L), receiptTraces())
 
         receipts.delete(id, deleteTransaction = false)
         receipts.delete(id, deleteTransaction = false) // repeat is harmless

@@ -327,8 +327,30 @@ object Migrations {
         }
     }
 
+    /**
+     * Confirmed receipts no longer keep their reading: erase the OCR lines and the pointers
+     * into them, so they show the page alone. The finality triggers are dropped to clear the
+     * pointers and recreated on open.
+     */
+    val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            val confirmed = "SELECT id FROM receipts WHERE status = 'CONFIRMED'"
+            listOf(
+                "DROP TRIGGER IF EXISTS trg_receipts_final",
+                "DROP TRIGGER IF EXISTS trg_receipt_items_validate_update",
+                "DELETE FROM receipt_ocr_lines WHERE receipt_id IN ($confirmed)",
+                "UPDATE receipts SET field_sources = '' WHERE status = 'CONFIRMED'",
+                "UPDATE receipt_items SET source_page = NULL, source_line = NULL WHERE receipt_id IN ($confirmed)",
+            ).forEach(db::execSQL)
+            db.execSQL(
+                "INSERT OR REPLACE INTO app_metadata (meta_key, meta_value) VALUES (?, '1')",
+                arrayOf<Any>(AppMetadataKeys.VACUUM_PENDING),
+            )
+        }
+    }
+
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-        MIGRATION_9_10,
+        MIGRATION_9_10, MIGRATION_10_11,
     )
 }

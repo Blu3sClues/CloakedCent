@@ -325,12 +325,8 @@ class RoomReceiptRepository(
     }
 
     override suspend fun confirm(id: Long, review: ReceiptReview, target: ConfirmTarget, keepImages: Boolean): Long {
-        // Dropping the images erases their records, so that path scrubs like any deletion.
-        val (transactionId, files) = if (keepImages) {
-            write { db -> confirmInTransaction(db, id, review, target, keepImages = true) }
-        } else {
-            erase { db -> confirmInTransaction(db, id, review, target, keepImages = false) }
-        }
+        // Confirming erases the reading (OCR text and boxes), and the images if not kept, so it scrubs like any deletion.
+        val (transactionId, files) = erase { db -> confirmInTransaction(db, id, review, target, keepImages) }
         // After the commit; if this is interrupted, orphan cleanup removes them.
         withContext(ioDispatcher) { files.forEach(images::delete) }
         return transactionId
@@ -394,6 +390,8 @@ class RoomReceiptRepository(
             val product = resolveProduct(db, item, categoryId, now)
             val itemId = dao.insertItem(
                 item.toEntity(id, position).copy(
+                    sourcePage = null,
+                    sourceLine = null,
                     productId = product.id,
                     categoryId = categoryId,
                     uncertain = false,
@@ -424,10 +422,13 @@ class RoomReceiptRepository(
                 storeId = store.id,
                 transactionId = transactionId,
                 uncertainFields = "",
+                fieldSources = "",
                 updatedAt = now,
                 confirmedAt = now,
             ),
         )
+        // The confirmed receipt shows the page alone; the reading behind the review boxes goes.
+        dao.deleteOcrLines(id)
         val imageFiles = if (keepImages) emptyList() else dao.getImages(id).map { it.fileName }
         if (!keepImages) dao.deleteImages(id)
         return transactionId to imageFiles
