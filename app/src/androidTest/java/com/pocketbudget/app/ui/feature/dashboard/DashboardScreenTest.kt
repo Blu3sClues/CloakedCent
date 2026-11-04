@@ -73,6 +73,25 @@ class DashboardScreenTest {
     }
 
     @Test
+    fun creditCardsShowWhatIsOwedAsAPositiveAmount() {
+        val card = Account(2, "Visa", AccountType.CREDIT_CARD, Money(-10_000), true)
+        val checking = Account(1, "Checking", AccountType.CHECKING, Money.ZERO, true)
+        show(
+            ready(
+                accounts = listOf(
+                    AccountBalance(card, current = Money(-15_005), projected = Money(-20_005)),
+                    AccountBalance(checking, current = Money(-4_000), projected = Money(-4_000)),
+                ),
+            ),
+        )
+        composeRule.onNodeWithText("$150.05").assertIsDisplayed()
+        composeRule.onNodeWithText("$200.05").assertIsDisplayed()
+        composeRule.onNodeWithText("-$150.05").assertDoesNotExist()
+        // Other accounts still show their own sign.
+        composeRule.onNodeWithText("-$40.00").assertIsDisplayed()
+    }
+
+    @Test
     fun emptyLedgerOffersSampleDataWhenAvailable() {
         var requested = false
         show(ready(canLoadSampleData = true), onSample = { requested = true })

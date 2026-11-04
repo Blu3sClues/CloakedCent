@@ -7,6 +7,18 @@ import java.time.LocalDate
 
 enum class AccountType { CHECKING, SAVINGS, CASH, CREDIT_CARD, LOAN, INVESTMENT, OTHER }
 
+/**
+ * A credit card's balance is money owed. It is stored and calculated as a negative balance,
+ * like any debt, but the user enters and sees the amount owed as a positive number.
+ */
+val AccountType.isOwed: Boolean get() = this == AccountType.CREDIT_CARD
+
+/** [balance] as shown to the user: the amount owed for a credit card, the balance itself otherwise. */
+fun AccountType.displayBalance(balance: Money): Money = if (isOwed) -balance else balance
+
+/** The stored opening balance for what the user entered: a credit card's is always owed, so negative. */
+fun AccountType.openingBalanceFromInput(entered: Money): Money = if (isOwed) -entered.abs() else entered
+
 data class Account(
     val id: Long,
     val name: String,

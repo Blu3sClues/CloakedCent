@@ -73,6 +73,8 @@
     <string name="field_account_type">Account type</string>
     <string name="field_opening_balance">Opening balance</string>
     <string name="hint_opening_balance">Use a negative amount for money owed, e.g. -250.00</string>
+    <string name="field_amount_owed">Amount owed</string>
+    <string name="hint_amount_owed">What you currently owe on this card. It counts against your total balance.</string>
     <string name="field_include_in_totals">Include in totals</string>
     <string name="hint_include_in_totals">Count this account in your total balance</string>
     <string name="confirm_archive_title">Archive this account?</string>

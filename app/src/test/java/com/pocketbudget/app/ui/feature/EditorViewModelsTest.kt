@@ -170,11 +170,11 @@ class EditorViewModelsTest {
     }
 
     @Test
-    fun `account editor passes negative opening balances and maps archive errors`() = runTest(dispatcher) {
+    fun `account editor saves what a credit card owes as negative and maps archive errors`() = runTest(dispatcher) {
         val create = AccountEditorViewModel(null, ledger.accountRepository)
         create.onNameChange("Visa")
         create.onTypeChange(AccountType.CREDIT_CARD)
-        create.onOpeningBalanceChange("-250.00")
+        create.onOpeningBalanceChange("250.00")
         create.save()
         advanceUntilIdle()
         assertEquals(Triple("Visa", AccountType.CREDIT_CARD, Money(-25_000)), ledger.createdAccounts.single())
@@ -187,6 +187,30 @@ class EditorViewModelsTest {
         advanceUntilIdle()
         assertEquals(R.string.error_account_has_balance, edit.state.value.error)
         assertFalse(edit.state.value.finished)
+    }
+
+    @Test
+    fun `a minus sign typed out of habit still records a credit card as owed`() = runTest(dispatcher) {
+        val vm = AccountEditorViewModel(null, ledger.accountRepository)
+        vm.onNameChange("Store card")
+        vm.onTypeChange(AccountType.CREDIT_CARD)
+        vm.onOpeningBalanceChange("-80")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(Money(-8_000), ledger.createdAccounts.single().third)
+    }
+
+    @Test
+    fun `other account types keep the sign the user typed`() = runTest(dispatcher) {
+        listOf(AccountType.CHECKING to "-40", AccountType.LOAN to "-5000", AccountType.SAVINGS to "120").forEach { (type, text) ->
+            val vm = AccountEditorViewModel(null, ledger.accountRepository)
+            vm.onNameChange(type.name)
+            vm.onTypeChange(type)
+            vm.onOpeningBalanceChange(text)
+            vm.save()
+            advanceUntilIdle()
+        }
+        assertEquals(listOf(Money(-4_000), Money(-500_000), Money(12_000)), ledger.createdAccounts.map { it.third })
     }
 
     @Test

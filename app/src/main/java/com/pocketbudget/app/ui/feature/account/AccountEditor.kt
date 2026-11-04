@@ -42,6 +42,8 @@ import com.pocketbudget.app.PocketBudgetApp
 import com.pocketbudget.app.R
 import com.pocketbudget.app.core.money.Money
 import com.pocketbudget.app.domain.model.AccountType
+import com.pocketbudget.app.domain.model.isOwed
+import com.pocketbudget.app.domain.model.openingBalanceFromInput
 import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.ui.components.AmountInput
 import com.pocketbudget.app.ui.components.BackTopBar
@@ -116,7 +118,7 @@ class AccountEditorViewModel(
         }
         run {
             if (accountId == null) {
-                accounts.create(s.name, s.type, opening!!, s.includeInTotals)
+                accounts.create(s.name, s.type, s.type.openingBalanceFromInput(opening!!), s.includeInTotals)
             } else {
                 accounts.update(accountId, s.name, s.type, s.includeInTotals)
             }
@@ -230,9 +232,14 @@ fun AccountEditorScreen(
                 MoneyField(
                     value = state.openingBalance,
                     onValueChange = onOpeningBalanceChange,
-                    label = stringResource(R.string.field_opening_balance),
+                    // A credit card asks for what is owed, as a plain amount; it is saved as a negative balance.
+                    label = stringResource(if (state.type.isOwed) R.string.field_amount_owed else R.string.field_opening_balance),
                     supportingText = stringResource(
-                        if (state.openingBalanceInvalid) R.string.error_amount_invalid else R.string.hint_opening_balance,
+                        when {
+                            state.openingBalanceInvalid -> R.string.error_amount_invalid
+                            state.type.isOwed -> R.string.hint_amount_owed
+                            else -> R.string.hint_opening_balance
+                        },
                     ),
                     isError = state.openingBalanceInvalid,
                 )

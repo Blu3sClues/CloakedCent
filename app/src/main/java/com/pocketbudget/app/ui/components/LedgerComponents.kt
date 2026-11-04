@@ -27,6 +27,7 @@ import com.pocketbudget.app.core.money.Money
 import com.pocketbudget.app.core.money.MoneyFormatter
 import com.pocketbudget.app.domain.model.AccountBalance
 import com.pocketbudget.app.domain.model.AccountType
+import com.pocketbudget.app.domain.model.displayBalance
 import com.pocketbudget.app.domain.model.TransactionListItem
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
@@ -153,8 +154,10 @@ fun AccountRow(balance: AccountBalance, modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        // A credit card shows what is owed as a positive amount; totals still count it as negative.
+        val type = balance.account.type
         Column(horizontalAlignment = Alignment.End) {
-            MoneyText(balance.current)
+            MoneyText(type.displayBalance(balance.current))
             if (balance.projected != balance.current) {
                 Row {
                     Text(
@@ -162,7 +165,7 @@ fun AccountRow(balance: AccountBalance, modifier: Modifier = Modifier) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    MoneyText(balance.projected, style = MoneyTextStyles.caption, color = PocketBudgetTheme.ledgerColors.scheduled)
+                    MoneyText(type.displayBalance(balance.projected), style = MoneyTextStyles.caption, color = PocketBudgetTheme.ledgerColors.scheduled)
                 }
             }
         }
