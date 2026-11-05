@@ -22,3 +22,10 @@ keystore.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# F-Droid repository output and keys
+*.p12
+fdroid/repo/
+fdroid/archive/
+fdroid/tmp/
+fdroid/unsigned/

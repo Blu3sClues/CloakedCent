@@ -39,6 +39,25 @@ android {
     // test runs never replace, clear or uninstall the developer's own debug installation.
     testBuildType = "qa"
 
+    // Release signing comes only from the environment, so no key or password is ever in the
+    // repository. Without CLOAKEDCENT_KEYSTORE the release build is simply left unsigned.
+    signingConfigs {
+        System.getenv("CLOAKEDCENT_KEYSTORE")?.let { keystore ->
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("CLOAKEDCENT_KEYSTORE_PASSWORD")
+                keyAlias = "cloakedcent"
+                keyPassword = System.getenv("CLOAKEDCENT_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
+    // This block is encrypted to Google Play's key, so no one else could read it. F-Droid's scanner flags it.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     buildTypes {
         create("qa") {
             initWith(getByName("debug"))
@@ -49,6 +68,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

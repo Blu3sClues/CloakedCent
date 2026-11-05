@@ -1,0 +1,10 @@
+# F-Droid repository settings. The workflow adds the keystore and its password when it runs;
+# neither is ever stored in this repository.
+repo_url: https://blu3sclues.github.io/CloakedCent/fdroid/repo
+repo_name: CloakedCent
+repo_description: >-
+  Official builds of CloakedCent, a private, fully offline budgeting app.
+  Source code: https://github.com/Blu3sClues/CloakedCent
+repo_icon: cloakedcent.png
+repo_keyalias: cloakedcent-repo
+keydname: CN=CloakedCent F-Droid repo

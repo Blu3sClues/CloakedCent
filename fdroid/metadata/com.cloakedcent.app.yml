@@ -1,0 +1,20 @@
+Categories:
+  - Money
+License: Apache-2.0
+AuthorName: Blu3sClues
+SourceCode: https://github.com/Blu3sClues/CloakedCent
+IssueTracker: https://github.com/Blu3sClues/CloakedCent/issues
+
+AutoName: CloakedCent
+Summary: Private, fully offline budgeting
+Description: |-
+  CloakedCent is a budgeting app that keeps your finances on your device. It has no
+  internet permission, no accounts, no analytics and no cloud services.
+
+  * Track accounts, income, expenses and transfers
+  * Budgets, recurring payments and an upcoming calendar
+  * Scan receipts and PDFs, read on your device, to split spending by item
+  * Spending analysis by category, store and product
+  * Manage your own categories and sub-categories
+  * The whole database is encrypted, and deletions are permanent
+  * Password-protected backups that you save and restore yourself

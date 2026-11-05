@@ -63,7 +63,7 @@ Run from the project root (`gradlew.bat` on Windows, `./gradlew` elsewhere).
 | Instrumented tests (emulator/device required) | `gradlew.bat connectedQaAndroidTest` |
 | Lint | `gradlew.bat lintDebug` |
 | Install on running emulator/device | `gradlew.bat installDebug` |
-| Release build (R8-shrunk, unsigned) | `gradlew.bat assembleRelease` |
+| Release build (R8-shrunk; signed if keys are set) | `gradlew.bat assembleRelease` |
 
 Outputs:
 
@@ -76,8 +76,23 @@ Tests run against a separate **qa** build (`com.cloakedcent.app.qa`), which the
 instrumented test run installs and removes. Your own debug installation and its data are
 never replaced, cleared or uninstalled by tests.
 
-Release signing is not configured yet. Signing keys must never be committed
-(`*.jks`, `*.keystore` and `keystore.properties` are gitignored).
+Release builds are signed only when `CLOAKEDCENT_KEYSTORE` and `CLOAKEDCENT_KEYSTORE_PASSWORD`
+are set in the environment; otherwise they stay unsigned. Signing keys must never be committed
+(`*.jks`, `*.keystore`, `*.p12` and `keystore.properties` are gitignored).
+
+### F-Droid repository
+
+Add this URL to an F-Droid client as a repository:
+
+```
+https://blu3sclues.github.io/CloakedCent/fdroid/repo?fingerprint=585B556ED5973320B09F2D44DFC71DB3BA9CFEC54FECC74D827AB628DD010DDB
+```
+
+To publish a version, raise `versionCode` and `versionName` in `app/build.gradle.kts`, push to
+`main`, then run **Publish F-Droid repo** from the repository's Actions tab. It needs GitHub Pages
+set to deploy from GitHub Actions, and the repository secrets `APK_KEYSTORE_B64`,
+`APK_KEYSTORE_PASSWORD`, `REPO_KEYSTORE_B64` and `REPO_KEYSTORE_PASSWORD`. Repository settings and
+the app's listing are in `fdroid/`.
 
 ---
 
