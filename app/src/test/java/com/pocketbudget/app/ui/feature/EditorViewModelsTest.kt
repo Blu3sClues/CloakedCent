@@ -3,6 +3,8 @@ package com.pocketbudget.app.ui.feature
 import androidx.lifecycle.SavedStateHandle
 import com.pocketbudget.app.R
 import com.pocketbudget.app.core.money.Money
+import com.pocketbudget.app.domain.model.Account
+import com.pocketbudget.app.domain.model.AccountBalance
 import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.LedgerException
 import com.pocketbudget.app.domain.model.TransactionDetail
@@ -12,6 +14,8 @@ import com.pocketbudget.app.domain.model.TransactionType
 import com.pocketbudget.app.testing.FakeLedger
 import com.pocketbudget.app.ui.feature.account.AccountEditorViewModel
 import com.pocketbudget.app.ui.feature.history.HistoryViewModel
+import com.pocketbudget.app.ui.feature.transaction.DestinationBalance
+import com.pocketbudget.app.ui.feature.transaction.TransactionEditorState
 import com.pocketbudget.app.ui.feature.transaction.TransactionEditorViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -129,6 +133,90 @@ class EditorViewModelsTest {
         val transfer = ledger.transfers.single()
         assertEquals(1L to 2L, transfer.fromAccountId to transfer.toAccountId)
         assertTrue(ledger.recorded.isEmpty())
+    }
+
+    private fun destinations() {
+        ledger.accounts.value = listOf(
+            AccountBalance(Account(1, "Checking", AccountType.CHECKING, Money.ZERO, true), Money(100_000), Money(100_000)),
+            AccountBalance(Account(2, "Savings", AccountType.SAVINGS, Money.ZERO, true), Money(50_000), Money(45_000)),
+            AccountBalance(Account(3, "Visa", AccountType.CREDIT_CARD, Money.ZERO, true), Money(-16_368), Money(-16_368)),
+        )
+    }
+
+    @Test
+    fun `destination balance appears once source, destination and amount are set and follows the amount`() = runTest(dispatcher) {
+        destinations()
+        val vm = editor(TransactionType.TRANSFER)
+        advanceUntilIdle()
+        fun shown() = vm.state.value.destinationAfterTransfer
+
+        vm.onAccountChange(1)
+        vm.onAmountChange("100")
+        assertEquals("no destination yet", null, shown())
+        vm.onToAccountChange(2)
+        assertEquals(DestinationBalance("Savings", Money(60_000)), shown())
+
+        vm.onAmountChange("100.5")
+        assertEquals(Money(60_050), shown()?.balance)
+        vm.onAmountChange("12.345")
+        assertEquals("invalid amount", null, shown())
+        vm.onAmountChange("0")
+        assertEquals("nothing moved", null, shown())
+        vm.onAmountChange("")
+        assertEquals("no amount", null, shown())
+
+        vm.onAmountChange("100")
+        vm.onToAccountChange(1)
+        assertEquals("same account is not a transfer", null, shown())
+    }
+
+    @Test
+    fun `destination balance needs a source account`() = runTest(dispatcher) {
+        destinations()
+        val vm = editor(TransactionType.TRANSFER)
+        advanceUntilIdle()
+        vm.onToAccountChange(2)
+        vm.onAmountChange("100")
+        assertEquals(null, vm.state.value.destinationAfterTransfer)
+    }
+
+    @Test
+    fun `a scheduled transfer builds on the projected balance`() = runTest(dispatcher) {
+        destinations()
+        val vm = editor(TransactionType.TRANSFER)
+        advanceUntilIdle()
+        vm.onAccountChange(1)
+        vm.onToAccountChange(2)
+        vm.onAmountChange("100")
+        vm.onScheduledChange(true)
+        assertEquals(Money(55_000), vm.state.value.destinationAfterTransfer?.balance)
+    }
+
+    @Test
+    fun `paying a credit card shows what is still owed`() = runTest(dispatcher) {
+        destinations()
+        val vm = editor(TransactionType.TRANSFER)
+        advanceUntilIdle()
+        vm.onAccountChange(1)
+        vm.onToAccountChange(3)
+        vm.onAmountChange("100")
+        assertEquals(DestinationBalance("Visa", Money(6_368)), vm.state.value.destinationAfterTransfer)
+    }
+
+    @Test
+    fun `other types and existing transfers show no destination balance`() = runTest(dispatcher) {
+        destinations()
+        val expense = editor(TransactionType.EXPENSE)
+        advanceUntilIdle()
+        expense.onAccountChange(1)
+        expense.onAmountChange("100")
+        assertEquals(null, expense.state.value.destinationAfterTransfer)
+
+        val state = TransactionEditorState(
+            isNew = false, loading = false, type = TransactionType.TRANSFER, date = LocalDate.of(2026, 11, 15),
+            balances = ledger.accounts.value, accountId = 1, toAccountId = 2, amount = "100",
+        )
+        assertEquals(null, state.destinationAfterTransfer)
     }
 
     @Test

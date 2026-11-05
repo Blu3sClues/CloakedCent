@@ -40,6 +40,7 @@ import com.pocketbudget.app.ui.components.BackTopBar
 import com.pocketbudget.app.ui.components.DateField
 import com.pocketbudget.app.ui.components.MoneyField
 import com.pocketbudget.app.ui.components.PickerField
+import com.pocketbudget.app.ui.components.rememberMoneyFormatter
 import java.time.LocalDate
 
 @Composable
@@ -126,6 +127,17 @@ fun TransactionEditorScreen(state: TransactionEditorState, actions: TransactionE
                 isError = state.amountInvalid,
                 supportingText = stringResource(R.string.error_amount_invalid).takeIf { state.amountInvalid },
             )
+            state.destinationAfterTransfer?.let {
+                Text(
+                    stringResource(
+                        R.string.transfer_balance_after,
+                        it.accountName,
+                        rememberMoneyFormatter().format(it.balance),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             DateField(stringResource(R.string.field_date), state.date, actions.onDateChange)
             if (state.hasCategory) {
                 PickerField(

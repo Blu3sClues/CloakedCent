@@ -1,5 +1,8 @@
 package com.pocketbudget.app.ui.feature
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -8,6 +11,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pocketbudget.app.core.money.Money
+import com.pocketbudget.app.domain.model.Account
+import com.pocketbudget.app.domain.model.AccountBalance
+import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.RevisionAction
 import com.pocketbudget.app.domain.model.TransactionDetail
 import com.pocketbudget.app.domain.model.TransactionRevision
@@ -61,6 +67,27 @@ class FormScreensTest {
         }
         compose.onNodeWithText("Enter an amount like 12.50").assertIsDisplayed()
         compose.onNodeWithText("Choose an account").assertIsDisplayed()
+    }
+
+    @Test
+    fun aNewTransferShowsTheDestinationBalanceAfterIt() {
+        val savings = AccountBalance(Account(2, "Savings", AccountType.SAVINGS, Money.ZERO, true), Money(550_000), Money(550_000))
+        var state by mutableStateOf(
+            TransactionEditorState(
+                isNew = true, loading = false, type = TransactionType.TRANSFER, date = LocalDate.of(2026, 11, 15),
+                accounts = listOf(1L to "Checking", 2L to "Savings"), balances = listOf(savings),
+                accountId = 1, toAccountId = 2, amount = "100",
+            ),
+        )
+        compose.setContent { PocketBudgetTheme { TransactionEditorScreen(state, TransactionEditorActions()) } }
+        compose.onNodeWithText("Savings balance after transfer: $5,600.00").assertIsDisplayed()
+
+        // Scheduled keeps the same wording.
+        state = state.copy(amount = "250.50", scheduled = true)
+        compose.onNodeWithText("Savings balance after transfer: $5,750.50").assertIsDisplayed()
+
+        state = state.copy(amount = "")
+        compose.onNodeWithText("Savings balance after transfer", substring = true).assertDoesNotExist()
     }
 
     @Test

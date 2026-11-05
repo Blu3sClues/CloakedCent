@@ -10,6 +10,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.pocketbudget.app.PocketBudgetApp
 import com.pocketbudget.app.R
+import com.pocketbudget.app.core.money.Money
+import com.pocketbudget.app.domain.model.AccountBalance
 import com.pocketbudget.app.domain.model.Category
 import com.pocketbudget.app.domain.model.CategoryKind
 import com.pocketbudget.app.domain.model.NewTransaction
@@ -17,6 +19,7 @@ import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.TransactionEdit
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
+import com.pocketbudget.app.domain.model.displayBalance
 import com.pocketbudget.app.domain.model.pathLabels
 import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.domain.repository.CategoryRepository
@@ -36,12 +39,16 @@ import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID
 
+/** A transfer's destination account and its balance afterwards, as balances are shown elsewhere. */
+data class DestinationBalance(val accountName: String, val balance: Money)
+
 data class TransactionEditorState(
     val isNew: Boolean,
     val loading: Boolean,
     val type: TransactionType,
     val date: LocalDate,
     val accounts: List<Pair<Long, String>> = emptyList(),
+    val balances: List<AccountBalance> = emptyList(),
     val categories: List<Pair<Long, String>> = emptyList(),
     val payeeNames: List<String> = emptyList(),
     val accountId: Long? = null,
@@ -60,6 +67,19 @@ data class TransactionEditorState(
     val finished: Boolean = false,
 ) {
     val isTransfer: Boolean get() = type == TransactionType.TRANSFER
+
+    /**
+     * What a new transfer would leave in the destination account, once both accounts and a valid
+     * amount are chosen. A scheduled transfer only changes the projected balance.
+     */
+    val destinationAfterTransfer: DestinationBalance?
+        get() {
+            if (!isNew || !isTransfer || accountId == null || accountId == toAccountId) return null
+            val moved = AmountInput.parse(amount)?.takeIf { it.isPositive } ?: return null
+            val destination = balances.firstOrNull { it.account.id == toAccountId } ?: return null
+            val before = if (scheduled) destination.projected else destination.current
+            return DestinationBalance(destination.account.name, destination.account.type.displayBalance(before + moved))
+        }
 
     /** Only income and expenses carry a category and payee. */
     val hasCategory: Boolean get() = type == TransactionType.INCOME || type == TransactionType.EXPENSE
@@ -98,11 +118,16 @@ class TransactionEditorViewModel(
     init {
         viewModelScope.launch {
             combine(accounts.observeBalances(), categories.observeAll(), payees.observeAll()) { a, c, p ->
-                Triple(a.map { it.account.id to it.account.name }, c, p.map { it.name })
-            }.collect { (accountOptions, categoryList, payeeNames) ->
+                Triple(a, c, p.map { it.name })
+            }.collect { (balances, categoryList, payeeNames) ->
                 allCategories = categoryList
                 _state.update {
-                    it.copy(accounts = accountOptions, categories = categoryOptions(it.type), payeeNames = payeeNames)
+                    it.copy(
+                        accounts = balances.map { b -> b.account.id to b.account.name },
+                        balances = balances,
+                        categories = categoryOptions(it.type),
+                        payeeNames = payeeNames,
+                    )
                 }
             }
         }

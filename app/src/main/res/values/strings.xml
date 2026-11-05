@@ -31,6 +31,7 @@
     <string name="type_expense">Expense</string>
     <string name="transfer_to">Transfer to %1$s</string>
     <string name="transfer_from">Transfer from %1$s</string>
+    <string name="transfer_balance_after">%1$s balance after transfer: %2$s</string>
     <string name="type_transfer">Transfer</string>
 
     <string name="action_back">Back</string>
