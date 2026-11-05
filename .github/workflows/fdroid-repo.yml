@@ -40,7 +40,10 @@ jobs:
         run: |
           sudo add-apt-repository -y ppa:fdroid/fdroidserver
           sudo apt-get update
-          sudo apt-get install -y fdroidserver
+          sudo apt-get install -y fdroidserver python3-venv
+          # The packaged androguard 3 stops on resources.arsc from current build tools; 4 only warns.
+          python3 -m venv --system-site-packages "$RUNNER_TEMP/fdroid-env"
+          "$RUNNER_TEMP/fdroid-env/bin/pip" install androguard==4.1.4
 
       - name: Build the signed repository index
         working-directory: fdroid
@@ -58,7 +61,7 @@ jobs:
             echo "keystorepass: $REPO_KEYSTORE_PASSWORD"
             echo "keypass: $REPO_KEYSTORE_PASSWORD"
           } >> config.yml
-          fdroid update --verbose
+          "$RUNNER_TEMP/fdroid-env/bin/python" /usr/bin/fdroid update --verbose
           rm keystore.p12 config.yml
 
       - name: Prepare the site
