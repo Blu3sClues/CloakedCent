@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Pocket Budget</string>
+    <string name="app_name">CloakedCent</string>
 
     <string name="home_storage_loading">Opening encrypted storage…</string>
     <string name="home_error_title">Your data could not be opened</string>
@@ -176,7 +176,7 @@
     <string name="settings_keep_receipt_images_on">The photo or PDF is kept with each receipt after you confirm it.</string>
     <string name="settings_keep_receipt_images_off">The image is deleted when you confirm a receipt. Its details, items and prices are kept.</string>
     <string name="settings_keep_receipt_images_confirm_title">Stop keeping receipt images?</string>
-    <string name="settings_keep_receipt_images_confirm_body">Each receipt\'s image will be permanently deleted when you confirm it. Its details, items and prices are still saved.\n\nDuplicate detection compares images, so if you scan a receipt again after its image has been deleted, Pocket Budget will not warn you that it is a duplicate.\n\nImages of receipts you have already confirmed are not affected.</string>
+    <string name="settings_keep_receipt_images_confirm_body">Each receipt\'s image will be permanently deleted when you confirm it. Its details, items and prices are still saved.\n\nDuplicate detection compares images, so if you scan a receipt again after its image has been deleted, CloakedCent will not warn you that it is a duplicate.\n\nImages of receipts you have already confirmed are not affected.</string>
     <string name="settings_keep_receipt_images_confirm_action">Turn off</string>
     <string name="theme_system">System default</string>
     <string name="theme_light">Light</string>
@@ -573,7 +573,7 @@
     <string name="backup_title">Create backup</string>
     <string name="restore_title">Restore backup</string>
     <string name="backup_intro">The backup contains your accounts, transactions, budgets, recurring items, receipts with their images, products and prices. It is encrypted with the password you choose and saved where you pick.</string>
-    <string name="restore_intro">Choose a Pocket Budget backup file and enter its password. It is checked completely before anything on this device is changed.</string>
+    <string name="restore_intro">Choose a CloakedCent backup file and enter its password. It is checked completely before anything on this device is changed.</string>
     <string name="backup_password_warning">If you lose the backup password, the backup cannot be opened by anyone, including you. It is not stored anywhere.</string>
     <string name="backup_password">Backup password</string>
     <string name="backup_password_confirm">Repeat password</string>
@@ -596,16 +596,16 @@
     <string name="restore_created">Created %1$s</string>
     <string name="restore_contents">Accounts: %1$d · Entries: %2$d · Receipts: %3$d · Images: %4$d</string>
     <string name="restore_app_version">Made with app version %1$s</string>
-    <string name="restore_replace_warning">Restoring replaces all data currently in Pocket Budget on this device.</string>
+    <string name="restore_replace_warning">Restoring replaces all data currently in CloakedCent on this device.</string>
     <string name="restore_replace">Replace my data</string>
     <string name="restore_confirm_title">Replace all current data?</string>
-    <string name="restore_confirm_body">Everything now in Pocket Budget on this device will be replaced by the backup. This cannot be undone.</string>
-    <string name="restore_restarting">The backup is ready. Pocket Budget will restart to finish restoring.</string>
+    <string name="restore_confirm_body">Everything now in CloakedCent on this device will be replaced by the backup. This cannot be undone.</string>
+    <string name="restore_restarting">The backup is ready. CloakedCent will restart to finish restoring.</string>
     <string name="restore_restart">Restart now</string>
     <string name="restore_error_password">The password is wrong or the file is damaged. Nothing on this device was changed.</string>
     <string name="restore_error_incomplete">The backup file is incomplete. Nothing on this device was changed.</string>
-    <string name="restore_error_newer">This backup was made by a newer version of Pocket Budget. Update the app first.</string>
-    <string name="restore_error_damaged">This is not a valid Pocket Budget backup, or it is damaged. Nothing on this device was changed.</string>
+    <string name="restore_error_newer">This backup was made by a newer version of CloakedCent. Update the app first.</string>
+    <string name="restore_error_damaged">This is not a valid CloakedCent backup, or it is damaged. Nothing on this device was changed.</string>
     <plurals name="backup_password_rules">
         <item quantity="one">At least %1$d character. A longer passphrase is stronger.</item>
         <item quantity="other">At least %1$d characters. A longer passphrase is stronger.</item>
@@ -613,10 +613,10 @@
     <string name="settings_about">About &amp; privacy</string>
     <string name="settings_storage_encrypted">Encrypted on this device with SQLCipher %1$s · Offline</string>
     <string name="settings_storage_checking">Checking encrypted storage…</string>
-    <string name="settings_privacy_body">Pocket Budget has no internet access. Your data, receipts and backups stay on this device unless you export them.</string>
+    <string name="settings_privacy_body">CloakedCent has no internet access. Your data, receipts and backups stay on this device unless you export them.</string>
     <string name="settings_version">Version %1$s</string>
     <string name="settings_licences">Open-source licences</string>
     <string name="acknowledgements_title">Open-source licences</string>
     <string name="nav_home">Home</string>
-    <string name="acknowledgements_intro">Pocket Budget is built with the following open-source software. Tap an entry to read its licence.</string>
+    <string name="acknowledgements_intro">CloakedCent is built with the following open-source software. Tap an entry to read its licence.</string>
 </resources>

@@ -1,4 +1,4 @@
-# Pocket Budget release shrinking rules.
+# CloakedCent release shrinking rules.
 #
 # SQLCipher, Room and AndroidX ship their own consumer rules inside their AARs,
 # so nothing needs to be kept here for them.

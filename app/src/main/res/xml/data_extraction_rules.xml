@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Android 12+ backup rules. Nothing is eligible for cloud backup or
-    device-to-device transfer. Pocket Budget backups are user-initiated,
+    device-to-device transfer. CloakedCent backups are user-initiated,
     encrypted exports handled inside the app.
 -->
 <data-extraction-rules>

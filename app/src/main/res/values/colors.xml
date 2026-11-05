@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Colors needed before Compose draws: launcher icon and window/splash background. -->
 <resources>
+    <color name="icon_background">#001B50</color>
     <color name="brand_aqua">#0089A3</color>
     <color name="brand_white">#FFFFFF</color>
     <color name="brand_midnight">#0B1A2E</color>

@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.pocketbudget.app"
+    namespace = "com.cloakedcent.app"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -16,7 +16,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.pocketbudget.app"
+        applicationId = "com.cloakedcent.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -35,7 +35,7 @@ android {
         noCompress += "traineddata"
     }
 
-    // Instrumented tests run against a separate "qa" install (com.pocketbudget.app.qa), so
+    // Instrumented tests run against a separate "qa" install (com.cloakedcent.app.qa), so
     // test runs never replace, clear or uninstall the developer's own debug installation.
     testBuildType = "qa"
 

@@ -1,4 +1,4 @@
-# Pocket Budget dependency catalog.
+# CloakedCent dependency catalog.
 #
 # Versions were chosen together, not independently. Constraints that pin them:
 # - compileSdk 36 (latest installed platform). Compose 1.12+, core 1.19+ and

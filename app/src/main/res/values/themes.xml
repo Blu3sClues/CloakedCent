@@ -2,10 +2,10 @@
 <resources>
     <!--
         Window theme only. All in-app styling comes from the Compose
-        PocketBudgetTheme; this sets the background shown during launch
+        CloakedCentTheme; this sets the background shown during launch
         (also used as the Android 12+ splash background).
     -->
-    <style name="Theme.PocketBudget" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.CloakedCent" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/window_background</item>
     </style>
 </resources>

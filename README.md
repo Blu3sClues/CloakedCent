@@ -1,13 +1,13 @@
 ! WORK IN PROGRESS !
 
-At this time pocket-budget is a working in progress exclusively worked on by myself in free time.
+At this time CloakedCent is a working in progress exclusively worked on by myself in free time.
 This application is written using claude code for myself, so no I don't care if you think it's vibecoded slop.
 
 If you end up finding this, feel free to let me know your thoughs :)
 
 ---
 
-# Pocket Budget
+# CloakedCent
 
 A private, fully offline budgeting app for Android.
 
@@ -16,7 +16,7 @@ A private, fully offline budgeting app for Android.
 - Room on SQLCipher: the whole database is encrypted at rest
 - No internet permission, no accounts, no analytics, no cloud services
 
-Application ID `com.pocketbudget.app` · minSdk 26 · targetSdk 36
+Application ID `com.cloakedcent.app` · minSdk 26 · targetSdk 36
 
 ---
 
@@ -72,7 +72,7 @@ Outputs:
 - Instrumented test report: `app/build/reports/androidTests/connected/qa/index.html`
 - Lint report: `app/build/reports/lint-results-debug.html`
 
-Tests run against a separate **qa** build (`com.pocketbudget.app.qa`), which the
+Tests run against a separate **qa** build (`com.cloakedcent.app.qa`), which the
 instrumented test run installs and removes. Your own debug installation and its data are
 never replaced, cleared or uninstalled by tests.
 
@@ -84,8 +84,8 @@ Release signing is not configured yet. Signing keys must never be committed
 ## Project structure
 
 ```
-app/src/main/java/com/pocketbudget/app/
-├── PocketBudgetApp.kt        Application; owns the AppContainer
+app/src/main/java/com/cloakedcent/app/
+├── CloakedCentApp.kt        Application; owns the AppContainer
 ├── MainActivity.kt           Single activity, Compose entry point
 ├── core/money/               Money: exact whole-cent arithmetic
 ├── data/
@@ -110,7 +110,7 @@ interfaces, never on Room or SQLCipher.
 
 ## Security model
 
-**Database encryption.** The database (`pocket_budget.db`) is encrypted by
+**Database encryption.** The database (`cloaked_cent.db`) is encrypted by
 SQLCipher 4 (AES-256). Instrumented tests check that the file has no plaintext
 SQLite header, that stored values do not appear in the raw bytes, and that a
 wrong key cannot open it.
@@ -164,10 +164,13 @@ Settings → Backup creates a password-encrypted backup and saves it wherever yo
 using the Storage Access Framework. Settings → Restore backup reads one back. Nothing is
 uploaded, and no cloud service is involved.
 
-### Format (`.pbbackup`, version 1)
+### Format (`.ccbackup`, version 1)
+
+Backups from before the rename (magic `PBBK`, with `.pbr` images under magic `PBRI`) use
+the same format and can still be restored.
 
 ```
-"PBBK" | format version (1 byte) | header length (2 bytes, big-endian) | header (UTF-8 JSON)
+"CCBK" | format version (1 byte) | header length (2 bytes, big-endian) | header (UTF-8 JSON)
 chunk*: ciphertext length (4 bytes) | AES-256-GCM ciphertext with its 16-byte tag
 ```
 
@@ -190,8 +193,8 @@ chunk*: ciphertext length (4 bytes) | AES-256-GCM ciphertext with its 16-byte ta
   |---|---|
   | `metadata.json` | Format version, database schema version, app version, creation time |
   | `database.key` | The 32-byte SQLCipher key. It exists only inside the encrypted backup and in memory. |
-  | `database/pocket_budget.db` | A consistent SQLCipher-encrypted copy, made with `sqlcipher_export` on a separate connection |
-  | `receipts/<uuid>.pbr` | Every receipt page image the database refers to (photos and imported PDF pages), copied as their already-encrypted files |
+  | `database/cloaked_cent.db` | A consistent SQLCipher-encrypted copy, made with `sqlcipher_export` on a separate connection |
+  | `receipts/<uuid>.ccr` | Every receipt page image the database refers to (photos and imported PDF pages), copied as their already-encrypted files |
   | `manifest.json` | Size and SHA-256 of every other entry |
 
 - **What is not in the backup.** The theme setting lives in SharedPreferences and is not
@@ -230,7 +233,7 @@ chunk*: ciphertext length (4 bytes) | AES-256-GCM ciphertext with its 16-byte ta
 - **Memory handling.** Password and key byte arrays are wiped after use. Text typed into
   the password field passes through immutable strings in the UI toolkit, which cannot be
   wiped.
-- **Visible metadata.** The header reveals only that the file is a Pocket Budget backup
+- **Visible metadata.** The header reveals only that the file is a CloakedCent backup
   and its KDF parameters. Its size reveals the approximate amount of data.
 - **Restore-time limits.** Argon2 settings are bounded (≤ 256 MiB, ≤ 10 iterations,
   ≤ 4 lanes), as are entry sizes and entry counts, so a crafted file cannot exhaust the
@@ -417,7 +420,7 @@ so every balance comes from a single source and nothing can be double counted.
 
 ## Database migrations
 
-1. Change the entities and increment `version` in `PocketBudgetDatabase`.
+1. Change the entities and increment `version` in `CloakedCentDatabase`.
 2. Add a `Migration` to `Migrations.ALL` (`data/db/Migrations.kt`).
 3. Build once. Room exports `app/schemas/.../<version>.json`; commit it.
 4. Add a test to `MigrationTest` that creates the old version, inserts
