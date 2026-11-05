@@ -30,6 +30,7 @@ import com.pocketbudget.app.domain.model.ScheduleState
 import com.pocketbudget.app.domain.model.TransactionFilter
 import com.pocketbudget.app.domain.model.TransactionType
 import com.pocketbudget.app.domain.model.UpcomingItem
+import com.pocketbudget.app.domain.model.canSendTransfers
 import com.pocketbudget.app.domain.repository.BudgetRepository
 import com.pocketbudget.app.domain.repository.RecurringRepository
 import com.pocketbudget.app.domain.repository.RecurringRepository.Companion.GENERATION_HORIZON_DAYS
@@ -320,6 +321,8 @@ class RoomRecurringRepository(
         var created = 0
         for (entity in db().recurringDao().getActive()) {
             val schedule = entity.toDomain()
+            // A schedule saved before credit cards could not send transfers waits until its source is changed.
+            if (schedule.type == TransactionType.TRANSFER && db().accountDao().getById(schedule.accountId)?.type?.canSendTransfers == false) continue
             val dates = Recurrence.between(
                 schedule.startDate, schedule.frequency, schedule.interval, schedule.endDate,
                 afterExclusive = schedule.generatedThrough, throughInclusive = horizon,
@@ -428,6 +431,7 @@ class RoomRecurringRepository(
         }
         if (draft.type == TransactionType.TRANSFER) {
             if (draft.toAccountId == null || draft.toAccountId == draft.accountId) throw LedgerException.SameAccountTransfer()
+            if (db.accountDao().getById(draft.accountId)?.type?.canSendTransfers == false) throw LedgerException.CreditCardTransferSource()
         } else if (draft.categoryId != null) {
             val expected = if (draft.type == TransactionType.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
             if (db.categoryDao().getById(draft.categoryId)?.kind != expected) throw LedgerException.CategoryMismatch()

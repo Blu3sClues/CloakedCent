@@ -16,6 +16,9 @@ val AccountType.isOwed: Boolean get() = this == AccountType.CREDIT_CARD
 /** [balance] as shown to the user: the amount owed for a credit card, the balance itself otherwise. */
 fun AccountType.displayBalance(balance: Money): Money = if (isOwed) -balance else balance
 
+/** A credit card can receive a transfer (a payment) but cannot be its source. */
+val AccountType.canSendTransfers: Boolean get() = this != AccountType.CREDIT_CARD
+
 /** The stored opening balance for what the user entered: a credit card's is always owed, so negative. */
 fun AccountType.openingBalanceFromInput(entered: Money): Money = if (isOwed) -entered.abs() else entered
 
@@ -304,6 +307,7 @@ sealed class LedgerException(message: String) : Exception(message) {
     class AccountUnavailable(id: Long) : LedgerException("Account $id does not exist or is archived")
     class CategoryMismatch : LedgerException("Category does not exist or does not match the entry type")
     class SameAccountTransfer : LedgerException("Transfer source and destination must differ")
+    class CreditCardTransferSource : LedgerException("A credit card cannot be the source of a transfer")
     class AccountHasBalance : LedgerException("Only accounts with a zero balance can be archived")
     class AdjustmentKindMismatch :
         LedgerException("Increases can be income or balance-only; decreases can be expense or balance-only")

@@ -299,6 +299,14 @@ class TransactionRepositoryTest {
     }
 
     @Test
+    fun aCreditCardCanBePaidByTransfer() = runTest {
+        val a = account("A", 10_000)
+        val card = t.accounts.create("Visa", AccountType.CREDIT_CARD, Money(-5_000))
+        t.ledger.recordTransfer(transfer("pay", a, card, 100))
+        assertEquals(Money(-4_900), balances().getValue(card).current)
+    }
+
+    @Test
     fun invalidRequestsAreRejectedBeforeWriting() = runTest {
         val a = account("A")
         val salary = t.categories.observeAll().first().first { it.name == "Salary" }.id
@@ -306,6 +314,8 @@ class TransactionRepositoryTest {
         assertFails<LedgerException.InvalidAmount> { t.ledger.record(entry("z", a, EXPENSE, 0)) }
         assertFails<LedgerException.CategoryMismatch> { t.ledger.record(entry("c", a, EXPENSE, 100, categoryId = salary)) }
         assertFails<LedgerException.SameAccountTransfer> { t.ledger.recordTransfer(transfer("s", a, a, 100)) }
+        val card = t.accounts.create("Visa", AccountType.CREDIT_CARD, Money(-5_000))
+        assertFails<LedgerException.CreditCardTransferSource> { t.ledger.recordTransfer(transfer("cc", card, a, 100)) }
         assertFails<LedgerException.AccountUnavailable> { t.ledger.record(entry("x", 999, INCOME, 100)) }
         assertFails<LedgerException.InvalidOperation> {
             t.ledger.record(entry("t", a, TransactionType.TRANSFER, 100))

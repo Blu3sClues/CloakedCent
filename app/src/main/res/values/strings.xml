@@ -60,6 +60,7 @@
     <string name="error_account_unavailable">That account is no longer available.</string>
     <string name="error_category_mismatch">That category doesn\'t match the transaction type.</string>
     <string name="error_same_account">Choose two different accounts.</string>
+    <string name="error_credit_card_transfer_source">A credit card cannot be the source of a transfer. Choose another account.</string>
     <string name="error_account_has_balance">Only accounts with a zero balance can be archived. Move or record the remaining balance first.</string>
     <string name="error_not_found">This record could not be found.</string>
     <string name="error_adjustment_kind">Increases can be income or balance-only; decreases can be expense or balance-only.</string>

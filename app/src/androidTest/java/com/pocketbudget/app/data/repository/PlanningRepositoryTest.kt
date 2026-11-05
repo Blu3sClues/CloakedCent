@@ -6,6 +6,7 @@ import com.pocketbudget.app.domain.model.AccountType
 import com.pocketbudget.app.domain.model.BudgetDraft
 import com.pocketbudget.app.domain.model.BudgetPeriodType
 import com.pocketbudget.app.domain.model.BudgetState
+import com.pocketbudget.app.domain.model.LedgerException
 import com.pocketbudget.app.domain.model.NewTransaction
 import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.PeriodSummary
@@ -242,6 +243,58 @@ class PlanningRepositoryTest {
         assertEquals(0L, t.count("SELECT COUNT(*) FROM transactions"))
         assertEquals(0L, t.count("SELECT COUNT(*) FROM recurring_occurrences WHERE transaction_id IS NOT NULL"))
         assertTrue(t.count("SELECT COUNT(*) FROM recurring_occurrences WHERE schedule_id = $id") >= 2)
+    }
+
+    @Test
+    fun aCreditCardCannotSendARecurringTransfer() = runTest {
+        val card = t.accounts.create("Visa", AccountType.CREDIT_CARD, Money(-5_000))
+        fun draft(from: Long, to: Long) = RecurringDraft(
+            "Move", RecurringKind.OTHER, TransactionType.TRANSFER, from, to, Money(1_000),
+            frequency = RecurrenceFrequency.WEEKLY, startDate = today,
+        )
+        assertTrue(runCatching { recurring.create(draft(card, savings)) }.exceptionOrNull() is LedgerException.CreditCardTransferSource)
+        // A card can still be paid on a schedule.
+        recurring.create(draft(checking, card))
+        assertEquals(3, scheduled().count { it.type == TransactionType.TRANSFER })
+    }
+
+    @Test
+    fun aWaitingScheduleResumesOnceItsSourceIsChanged() = runTest {
+        val source = t.accounts.create("Becomes a card", AccountType.CHECKING)
+        val waiting = recurring.create(
+            RecurringDraft("Move", RecurringKind.OTHER, TransactionType.TRANSFER, source, savings, Money(1_000),
+                frequency = RecurrenceFrequency.WEEKLY, startDate = today.plusDays(30)),
+        )
+        t.accounts.update(source, "Becomes a card", AccountType.CREDIT_CARD, true)
+        assertEquals(0, recurring.generateDue(today.plusDays(28)))
+
+        recurring.update(
+            waiting,
+            RecurringDraft("Move", RecurringKind.OTHER, TransactionType.TRANSFER, checking, savings, Money(1_000),
+                frequency = RecurrenceFrequency.WEEKLY, startDate = today.plusDays(30)),
+        )
+        // With a valid source it generates again.
+        assertTrue(recurring.generateDue(today.plusDays(28)) > 0)
+        assertTrue(scheduled().all { it.accountName == "Checking" })
+    }
+
+    @Test
+    fun generationSkipsATransferScheduleFromACreditCard() = runTest {
+        val source = t.accounts.create("Becomes a card", AccountType.CHECKING)
+        recurring.create(
+            RecurringDraft("Move", RecurringKind.OTHER, TransactionType.TRANSFER, source, savings, Money(1_000),
+                frequency = RecurrenceFrequency.WEEKLY, startDate = today.plusDays(30)),
+        )
+        t.accounts.update(source, "Becomes a card", AccountType.CREDIT_CARD, true)
+        recurring.create(
+            RecurringDraft("Rent", RecurringKind.RENT, TransactionType.EXPENSE, checking, amount = Money(2_000),
+                frequency = RecurrenceFrequency.MONTHLY, startDate = today),
+        )
+        // Well past the transfer's start: it records nothing, and the rent is unaffected.
+        recurring.generateDue(today.plusDays(60))
+        val pending = scheduled()
+        assertEquals(0, pending.count { it.type == TransactionType.TRANSFER })
+        assertTrue(pending.any { it.type == TransactionType.EXPENSE })
     }
 
     @Test

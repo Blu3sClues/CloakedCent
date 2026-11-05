@@ -20,6 +20,7 @@ import com.pocketbudget.app.domain.model.Category
 import com.pocketbudget.app.domain.model.CategoryKind
 import com.pocketbudget.app.domain.model.CategoryUsage
 import com.pocketbudget.app.domain.model.MAX_CATEGORY_DEPTH
+import com.pocketbudget.app.domain.model.canSendTransfers
 import com.pocketbudget.app.domain.model.depthOf
 import com.pocketbudget.app.domain.model.heightOf
 import com.pocketbudget.app.domain.model.LedgerException
@@ -359,6 +360,7 @@ class RoomTransactionRepository(
         if (transfer.fromAccountId == transfer.toAccountId) throw LedgerException.SameAccountTransfer()
         requireActiveAccount(db, transfer.fromAccountId)
         requireActiveAccount(db, transfer.toAccountId)
+        if (db.accountDao().getById(transfer.fromAccountId)?.type?.canSendTransfers == false) throw LedgerException.CreditCardTransferSource()
 
         val now = clock.millis()
         val transferId = dao.insertTransfer(

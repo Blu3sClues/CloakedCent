@@ -14,6 +14,7 @@ import com.pocketbudget.app.domain.model.TransactionType
 import com.pocketbudget.app.testing.FakeLedger
 import com.pocketbudget.app.ui.feature.account.AccountEditorViewModel
 import com.pocketbudget.app.ui.feature.history.HistoryViewModel
+import com.pocketbudget.app.ui.feature.recurring.RecurringEditorState
 import com.pocketbudget.app.ui.feature.transaction.DestinationBalance
 import com.pocketbudget.app.ui.feature.transaction.TransactionEditorState
 import com.pocketbudget.app.ui.feature.transaction.TransactionEditorViewModel
@@ -217,6 +218,48 @@ class EditorViewModelsTest {
             balances = ledger.accounts.value, accountId = 1, toAccountId = 2, amount = "100",
         )
         assertEquals(null, state.destinationAfterTransfer)
+    }
+
+    @Test
+    fun `credit cards are offered as a transfer's destination but not its source`() = runTest(dispatcher) {
+        destinations()
+        val vm = editor(TransactionType.TRANSFER)
+        advanceUntilIdle()
+        assertEquals(listOf(1L, 2L), vm.state.value.sourceAccounts.map { it.first })
+        assertEquals(listOf(1L, 2L, 3L), vm.state.value.accounts.map { it.first })
+    }
+
+    @Test
+    fun `switching to a transfer clears a credit card source but keeps any other`() = runTest(dispatcher) {
+        destinations()
+        val vm = editor(TransactionType.EXPENSE)
+        advanceUntilIdle()
+        assertEquals("an expense can use a card", listOf(1L, 2L, 3L), vm.state.value.sourceAccounts.map { it.first })
+
+        vm.onAccountChange(3)
+        vm.onTypeChange(TransactionType.TRANSFER)
+        assertEquals(null, vm.state.value.accountId)
+
+        vm.onTypeChange(TransactionType.EXPENSE)
+        vm.onAccountChange(1)
+        vm.onTypeChange(TransactionType.TRANSFER)
+        assertEquals(1L, vm.state.value.accountId)
+    }
+
+    @Test
+    fun `the recurring form treats credit card sources the same and shows one already saved`() {
+        val form = RecurringEditorState(
+            isNew = true, startDate = LocalDate.of(2026, 11, 15), endDate = LocalDate.of(2027, 11, 15),
+            accounts = listOf(1L to "Checking", 3L to "Visa"), cardAccountIds = setOf(3L), accountId = 3,
+        )
+        assertEquals("an expense can use a card", listOf(1L, 3L), form.sourceAccounts.map { it.first })
+
+        val transfer = form.withType(TransactionType.TRANSFER)
+        assertEquals(null, transfer.accountId)
+        assertEquals(listOf(1L), transfer.sourceAccounts.map { it.first })
+
+        val saved = form.copy(type = TransactionType.TRANSFER)
+        assertEquals(listOf(1L, 3L), saved.sourceAccounts.map { it.first })
     }
 
     @Test

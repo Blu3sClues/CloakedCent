@@ -102,7 +102,7 @@ fun TransactionEditorScreen(state: TransactionEditorState, actions: TransactionE
 
             PickerField(
                 label = stringResource(if (state.isTransfer) R.string.field_from_account else R.string.field_account),
-                options = state.accounts,
+                options = state.sourceAccounts,
                 selected = state.accountId,
                 onSelect = actions.onAccountChange,
                 isError = state.accountMissing,

@@ -62,6 +62,7 @@ import com.pocketbudget.app.domain.model.RecurringSchedule
 import com.pocketbudget.app.domain.model.ScheduleState
 import com.pocketbudget.app.domain.model.TransactionType
 import com.pocketbudget.app.domain.model.UpcomingItem
+import com.pocketbudget.app.domain.model.canSendTransfers
 import com.pocketbudget.app.domain.model.pathLabels
 import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.domain.repository.CategoryRepository
@@ -482,6 +483,7 @@ data class RecurringEditorState(
     val kind: RecurringKind = RecurringKind.OTHER,
     val type: TransactionType = TransactionType.EXPENSE,
     val accounts: List<Pair<Long, String>> = emptyList(),
+    val cardAccountIds: Set<Long> = emptySet(),
     val categories: List<Pair<Long, String>> = emptyList(),
     val accountId: Long? = null,
     val toAccountId: Long? = null,
@@ -503,6 +505,14 @@ data class RecurringEditorState(
     val finished: Boolean = false,
 ) {
     val isCustom get() = frequency.name.startsWith("CUSTOM")
+
+    /** Credit cards cannot send a transfer; one already saved stays visible until it is changed. */
+    val sourceAccounts: List<Pair<Long, String>>
+        get() = if (type == TransactionType.TRANSFER) accounts.filter { it.first !in cardAccountIds || it.first == accountId } else accounts
+
+    /** This form with a new [type], dropping a source that type cannot use. */
+    fun withType(type: TransactionType) =
+        copy(type = type, accountId = accountId.takeUnless { type == TransactionType.TRANSFER && it in cardAccountIds })
 }
 
 class RecurringEditorViewModel(
@@ -523,7 +533,13 @@ class RecurringEditorViewModel(
         viewModelScope.launch {
             combine(accounts.observeBalances(), categories.observeAll()) { a, c -> a to c }.collect { (a, c) ->
                 allCategories = c
-                _state.update { it.copy(accounts = a.map { b -> b.account.id to b.account.name }, categories = categoryOptions(it.type)) }
+                _state.update {
+                    it.copy(
+                        accounts = a.map { b -> b.account.id to b.account.name },
+                        cardAccountIds = a.filterNot { b -> b.account.type.canSendTransfers }.map { b -> b.account.id }.toSet(),
+                        categories = categoryOptions(it.type),
+                    )
+                }
             }
         }
         if (scheduleId != null) viewModelScope.launch {
@@ -623,7 +639,7 @@ fun RecurringEditorScreen(
             val types = listOf(TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 types.forEachIndexed { index, type ->
-                    SegmentedButton(state.type == type, { onChange { it.copy(type = type) } }, SegmentedButtonDefaults.itemShape(index, types.size)) {
+                    SegmentedButton(state.type == type, { onChange { it.withType(type) } }, SegmentedButtonDefaults.itemShape(index, types.size)) {
                         Text(stringResource(typeLabel(type)))
                     }
                 }
@@ -631,7 +647,7 @@ fun RecurringEditorScreen(
             OutlinedTextField(state.name, { v -> onChange { it.copy(name = v) } }, label = { Text(stringResource(R.string.recurring_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             PickerField(stringResource(R.string.recurring_kind), RecurringKind.entries.map { it to stringResource(recurringKindLabel(it)) }, state.kind, { v -> onChange { it.copy(kind = v) } })
             PickerField(
-                stringResource(if (isTransfer) R.string.field_from_account else R.string.field_account), state.accounts, state.accountId,
+                stringResource(if (isTransfer) R.string.field_from_account else R.string.field_account), state.sourceAccounts, state.accountId,
                 { v -> onChange { it.copy(accountId = v) } }, isError = state.accountMissing && state.accountId == null,
             )
             if (isTransfer) {

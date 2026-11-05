@@ -19,6 +19,7 @@ import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.TransactionEdit
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionType
+import com.pocketbudget.app.domain.model.canSendTransfers
 import com.pocketbudget.app.domain.model.displayBalance
 import com.pocketbudget.app.domain.model.pathLabels
 import com.pocketbudget.app.domain.repository.AccountRepository
@@ -67,6 +68,14 @@ data class TransactionEditorState(
     val finished: Boolean = false,
 ) {
     val isTransfer: Boolean get() = type == TransactionType.TRANSFER
+
+    /** Who a new entry can come from: credit cards cannot send a new transfer. */
+    val sourceAccounts: List<Pair<Long, String>>
+        get() {
+            if (!isNew || !isTransfer) return accounts
+            val cannotSend = balances.filterNot { it.account.type.canSendTransfers }.map { it.account.id }
+            return accounts.filterNot { it.first in cannotSend }
+        }
 
     /**
      * What a new transfer would leave in the destination account, once both accounts and a valid
@@ -174,7 +183,10 @@ class TransactionEditorViewModel(
 
     fun onTypeChange(type: TransactionType) {
         if (!_state.value.isNew) return
-        _state.update { it.copy(type = type, categoryId = null, categories = categoryOptions(type), error = null) }
+        _state.update {
+            val changed = it.copy(type = type, categoryId = null, categories = categoryOptions(type), error = null)
+            changed.copy(accountId = it.accountId?.takeIf { id -> changed.sourceAccounts.any { option -> option.first == id } })
+        }
     }
 
     fun onAccountChange(id: Long) = _state.update { it.copy(accountId = id, accountMissing = false, error = null) }
