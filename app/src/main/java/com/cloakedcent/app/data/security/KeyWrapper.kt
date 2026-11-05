@@ -18,4 +18,7 @@ interface KeyWrapper {
      * @throws DatabaseKeyException.KeystoreUnavailable for other platform failures.
      */
     fun unwrap(wrapped: ByteArray): ByteArray
+
+    /** Permanently destroys the key, so nothing wrapped by it can ever be unwrapped. */
+    fun destroy()
 }

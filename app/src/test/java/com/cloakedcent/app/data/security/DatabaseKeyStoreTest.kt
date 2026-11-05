@@ -112,6 +112,8 @@ class DatabaseKeyStoreTest {
      */
     private class FakeKeyWrapper(private val failWrap: Boolean = false) : KeyWrapper {
 
+        override fun destroy() = Unit
+
         override fun wrap(plaintext: ByteArray): ByteArray {
             if (failWrap) throw DatabaseKeyException.KeystoreUnavailable(IllegalStateException("test"))
             val body = ByteArray(plaintext.size) { (plaintext[it].toInt() xor PAD).toByte() }

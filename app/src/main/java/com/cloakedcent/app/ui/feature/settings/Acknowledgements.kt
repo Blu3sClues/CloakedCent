@@ -100,7 +100,7 @@ fun AcknowledgementsRoute(onBack: () -> Unit) {
     var showing by remember { mutableStateOf<License?>(null) }
     val license = showing
     if (license?.text != null) {
-        LicenseText(license, onBack = { showing = null })
+        LicenseText(license.title, license.text, onBack = { showing = null })
         return
     }
     Scaffold(topBar = { BackTopBar(stringResource(R.string.acknowledgements_title), onBack) }) { padding ->
@@ -124,17 +124,26 @@ fun AcknowledgementsRoute(onBack: () -> Unit) {
     }
 }
 
+/** The licence of CloakedCent itself. */
 @Composable
-private fun LicenseText(license: License, onBack: () -> Unit) {
+fun LicenseInformationRoute(onBack: () -> Unit) {
+    LicenseText(
+        title = stringResource(R.string.settings_license_information),
+        text = R.raw.license_apache_2_0,
+        intro = stringResource(R.string.license_information_intro),
+        onBack = onBack,
+    )
+}
+
+@Composable
+private fun LicenseText(title: String, @RawRes text: Int, intro: String? = null, onBack: () -> Unit) {
     val resources = LocalResources.current
-    val text = remember(license) { resources.openRawResource(license.text!!).bufferedReader().use { it.readText() } }
+    val body = remember(text) { resources.openRawResource(text).bufferedReader().use { it.readText() } }
     BackHandler(onBack = onBack)
-    Scaffold(topBar = { BackTopBar(license.title, onBack) }) { padding ->
-        Text(
-            text,
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-            style = MaterialTheme.typography.bodySmall,
-            fontFamily = FontFamily.Monospace,
-        )
+    Scaffold(topBar = { BackTopBar(title, onBack) }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
+            if (intro != null) Text(intro, Modifier.padding(bottom = 16.dp), style = MaterialTheme.typography.bodyMedium)
+            Text(body, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
     }
 }

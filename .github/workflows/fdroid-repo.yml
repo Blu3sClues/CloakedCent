@@ -53,7 +53,8 @@ jobs:
         run: |
           mkdir -p repo/icons
           cp ../app/build/outputs/apk/release/app-release.apk repo/com.cloakedcent.app.apk
-          cp metadata/com.cloakedcent.app/en-US/icon.png repo/icons/cloakedcent.png
+          # fdroid looks for repo_icon in this folder, and publishes a QR code placeholder if it is missing.
+          cp metadata/com.cloakedcent.app/en-US/icon.png cloakedcent.png
           base64 -d <<< "$REPO_KEYSTORE_B64" > keystore.p12
           chmod 600 config.yml keystore.p12
           {
@@ -63,6 +64,7 @@ jobs:
           } >> config.yml
           "$RUNNER_TEMP/fdroid-env/bin/python" /usr/bin/fdroid update --verbose
           rm keystore.p12 config.yml
+          cmp cloakedcent.png repo/icons/cloakedcent.png
 
       - name: Prepare the site
         run: |

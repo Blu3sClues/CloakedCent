@@ -90,6 +90,6 @@ abstract class CloakedCentDatabase : RoomDatabase() {
         const val NAME = "cloaked_cent.db"
 
         /** Current schema; backups from newer schemas are refused. */
-        const val SCHEMA_VERSION = 11
+        const val SCHEMA_VERSION = 12
     }
 }

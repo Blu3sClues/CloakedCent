@@ -167,9 +167,16 @@ No key is hardcoded, and no key material is logged or included in exception mess
 - **OCR** runs entirely on the device: Tesseract 5.5.1 through Tesseract4Android 4.9.0
   (Apache-2.0), with the English `tessdata_fast` model bundled in the APK. The SHA-256
   of the model is checked before use, and the build checks the SHA-256 of the AAR.
-- **Camera and location** permissions are requested only when used. Photos can be
-  picked without any permission. Location is a single fix, taken only when the user
-  taps *Use current location*, and is never needed for scanning.
+- **The camera** permission is requested only when the camera is opened. Photos can be
+  picked without any permission. The app has no location permission: a store address
+  is only ever typed in or read from the receipt by OCR.
+- **Secure delete** (Settings) erases everything after the user types `CONFIRM`. It is
+  recorded first and carried out at the next start, before the database opens, so an
+  interruption repeats it (`SecureWipe`). The Keystore key is destroyed first, which leaves
+  the encrypted database and images unreadable; files are then overwritten and deleted, and
+  the cache, settings and notifications are cleared. Flash storage does not guarantee an
+  overwrite reaches the old blocks, so the destroyed key is the real protection. Exported
+  backups are outside the app and are not touched.
 
 ---
 

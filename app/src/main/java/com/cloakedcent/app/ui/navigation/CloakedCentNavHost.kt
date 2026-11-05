@@ -22,6 +22,7 @@ import com.cloakedcent.app.ui.feature.history.HistoryRoute
 import com.cloakedcent.app.ui.feature.history.HistoryViewModel
 import com.cloakedcent.app.ui.feature.backup.BackupRoute
 import com.cloakedcent.app.ui.feature.settings.AcknowledgementsRoute
+import com.cloakedcent.app.ui.feature.settings.LicenseInformationRoute
 import com.cloakedcent.app.ui.feature.settings.CategoriesRoute
 import com.cloakedcent.app.ui.feature.settings.SettingsRoute
 import com.cloakedcent.app.ui.feature.budget.ARG_BUDGET_ID
@@ -61,6 +62,7 @@ internal object Routes {
     const val BACKUP = "backup"
     const val RESTORE = "restore"
     const val LICENCES = "licences"
+    const val LICENSE_INFORMATION = "license-information"
     const val CATEGORIES = "categories"
     const val BUDGETS = "budgets"
     const val BUDGET = "budget/{$ARG_BUDGET_ID}"
@@ -205,12 +207,14 @@ fun CloakedCentNavHost() {
                     onBackup = { nav.navigate(Routes.BACKUP) },
                     onRestore = { nav.navigate(Routes.RESTORE) },
                     onLicences = { nav.navigate(Routes.LICENCES) },
+                    onLicenseInformation = { nav.navigate(Routes.LICENSE_INFORMATION) },
                     onCategories = { nav.navigate(Routes.CATEGORIES) },
                 )
             }
             composable(Routes.BACKUP) { BackupRoute(restore = false, onBack = back) }
             composable(Routes.RESTORE) { BackupRoute(restore = true, onBack = back) }
             composable(Routes.LICENCES) { AcknowledgementsRoute(onBack = back) }
+            composable(Routes.LICENSE_INFORMATION) { LicenseInformationRoute(onBack = back) }
             composable(Routes.CATEGORIES) { CategoriesRoute(onBack = back) }
             composable(Routes.BUDGETS) {
                 BudgetsRoute(onBack = null, onOpen = { nav.navigate(Routes.budget(it)) }, onAdd = { nav.navigate(Routes.budgetEdit(null)) })

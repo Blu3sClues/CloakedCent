@@ -13,6 +13,14 @@
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
 
+    <!--
+        WorkManager adds this, but only needs it for foreground work, which this app does not use.
+        Reminders run through JobScheduler, and the device sleeps as normal.
+    -->
+    <uses-permission
+        android:name="android.permission.WAKE_LOCK"
+        tools:node="remove" />
+
     <!-- Local reminders for upcoming payments and budget alerts (requested in context on Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -20,16 +28,6 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature
         android:name="android.hardware.camera"
-        android:required="false" />
-
-    <!--
-        Optional, one-time store location, requested only when the user taps
-        "Use current location". Never needed for scanning; no background access.
-    -->
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-feature
-        android:name="android.hardware.location.gps"
         android:required="false" />
 
     <!--

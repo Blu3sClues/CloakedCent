@@ -15,6 +15,7 @@ import org.junit.Assert.assertThrows
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -587,6 +588,35 @@ class MigrationTest {
         helper.closeWhenFinished(db)
         // The finality trigger is back: the confirmed receipt cannot be reopened.
         assertTrue(runCatching { db.openHelper.writableDatabase.execSQL("UPDATE receipts SET status = 'NEEDS_REVIEW', transaction_id = NULL WHERE id = 1") }.isFailure)
+    }
+
+    @Test
+    fun migrate11To12ErasesSavedCoordinatesAndKeepsAddresses() = runTest {
+        helper.createDatabase(TEST_DB, 11).apply {
+            listOf(
+                """
+                INSERT INTO stores (id, name, normalized_name, address, latitude_e7, longitude_e7, created_at, updated_at) VALUES
+                    (1, 'Mart', 'mart', '1 Main St', 123456789, -987654321, 0, 0)
+                """,
+                """
+                INSERT INTO receipts (id, request_id, status, store_id, store_name, store_address, tax_cents, discount_cents,
+                    receipt_number, latitude_e7, longitude_e7, uncertain_fields, field_sources, created_at, updated_at) VALUES
+                    (1, 'q1', 'NEEDS_REVIEW', 1, 'Mart', '1 Main St', 0, 0, '', 123456789, -987654321, '', '', 0, 0)
+                """,
+            ).forEach(::execSQL)
+            close()
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 12, true, Migrations.MIGRATION_11_12).apply {
+            fun strings(sql: String) = query(sql).use { c -> generateSequence { if (c.moveToNext()) c.getString(0) else null }.toList() }
+            listOf("stores", "receipts").forEach { table ->
+                val columns = strings("SELECT name FROM pragma_table_info('$table')")
+                assertFalse(columns.toString(), columns.any { "latitude" in it || "longitude" in it })
+            }
+            assertEquals(listOf("1 Main St"), strings("SELECT address FROM stores"))
+            assertEquals(listOf("1 Main St"), strings("SELECT store_address FROM receipts"))
+            assertEquals(listOf("1"), strings("SELECT COUNT(*) FROM app_metadata WHERE meta_key = '${AppMetadataKeys.VACUUM_PENDING}'"))
+            close()
+        }
     }
 
     @Test

@@ -26,9 +26,6 @@ data class StoreEntity(
     val name: String,
     @ColumnInfo(name = "normalized_name") val normalizedName: String,
     val address: String? = null,
-    /** Degrees x 10^7; set only when the user explicitly captures a location. */
-    @ColumnInfo(name = "latitude_e7") val latitudeE7: Long? = null,
-    @ColumnInfo(name = "longitude_e7") val longitudeE7: Long? = null,
     @ColumnInfo(name = "payee_id") val payeeId: Long? = null,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
@@ -67,8 +64,6 @@ data class ReceiptEntity(
     @ColumnInfo(name = "receipt_number") val receiptNumber: String = "",
     @ColumnInfo(name = "default_category_id") val defaultCategoryId: Long? = null,
     @ColumnInfo(name = "transaction_id") val transactionId: Long? = null,
-    @ColumnInfo(name = "latitude_e7") val latitudeE7: Long? = null,
-    @ColumnInfo(name = "longitude_e7") val longitudeE7: Long? = null,
     /** Comma-separated ReceiptField names the parser was unsure about. */
     @ColumnInfo(name = "uncertain_fields") val uncertainFields: String = "",
     /** FIELD=page:line pairs pointing at the OCR line each value came from. */

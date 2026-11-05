@@ -22,6 +22,9 @@ class StorageLocations(
     /** Written last when staging is complete and validated. */
     val readyMarker get() = File(stagingDir, "ready")
 
+    /** Present from the moment a secure delete is confirmed until it has finished. */
+    val wipeMarker get() = File(journalFile.parentFile, "secure-wipe.pending")
+
     internal class Item(val live: File, val staged: File, val previous: File, val required: Boolean)
 
     /** Every live path a restore replaces: the database and its WAL/SHM/journal, the key, the receipt images. */

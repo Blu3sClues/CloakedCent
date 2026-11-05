@@ -1,6 +1,9 @@
 package com.cloakedcent.app.di
 
 import android.content.Context
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.edit
+import com.cloakedcent.app.data.backup.SecureWipe
 import com.cloakedcent.app.data.db.CloakedCentDatabase
 import com.cloakedcent.app.data.db.CloakedCentDatabaseFactory
 import com.cloakedcent.app.data.repository.LocalStorageRepository
@@ -37,6 +40,8 @@ import com.cloakedcent.app.domain.repository.RecurringRepository
 import com.cloakedcent.app.domain.repository.SettingsRepository
 import com.cloakedcent.app.domain.repository.StorageRepository
 import com.cloakedcent.app.domain.repository.TransactionRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -67,7 +72,8 @@ class AppContainer(context: Context) {
 
     // A failed initialisation is not cached by lazy, so "Try again" re-attempts it.
     private val database: CloakedCentDatabase by lazy {
-        // A confirmed restore is applied here, before anything opens the database.
+        // A confirmed secure delete or restore is applied here, before anything opens the database.
+        SecureWipe.finishIfScheduled(storage, keyWrapper, listOf(appContext.cacheDir), ::clearAppState)
         RestoreJournal.recover(storage)
         val databaseExists = appContext.getDatabasePath(CloakedCentDatabase.NAME).exists()
         val passphrase = databaseKeyStore.getOrCreatePassphrase(databaseExists)
@@ -114,6 +120,19 @@ class AppContainer(context: Context) {
             keyWrapper = keyWrapper,
             appVersion = runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName }.getOrNull().orEmpty(),
         )
+    }
+
+    /** Records a secure delete. The caller then restarts the app, which carries it out before the database opens. */
+    suspend fun scheduleSecureDelete() = withContext(Dispatchers.IO) {
+        SecureWipe.schedule(storage)
+        // Done now as well, so the restarted app does not show the old theme or a reminder.
+        clearAppState()
+    }
+
+    private fun clearAppState() {
+        appContext.getSharedPreferences(SharedPreferencesSettingsRepository.FILE_NAME, Context.MODE_PRIVATE)
+            .edit(commit = true) { clear() }
+        NotificationManagerCompat.from(appContext).cancelAll()
     }
 
     /** Debug builds only (see src/debug); null in release. */

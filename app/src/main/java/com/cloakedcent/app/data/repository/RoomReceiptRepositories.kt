@@ -20,7 +20,6 @@ import com.cloakedcent.app.domain.model.CategoryKind
 import com.cloakedcent.app.domain.model.ConfirmTarget
 import com.cloakedcent.app.domain.model.DuplicateWarning
 import com.cloakedcent.app.domain.model.ExpenseMatch
-import com.cloakedcent.app.domain.model.GeoPoint
 import com.cloakedcent.app.domain.model.ImageHashes
 import com.cloakedcent.app.domain.model.ImportOutcome
 import com.cloakedcent.app.domain.model.LedgerException
@@ -496,9 +495,6 @@ class RoomReceiptRepository(
         if (existing != null) {
             val updated = existing.copy(
                 address = existing.address ?: address,
-                // Coordinates are only ever set from an explicit capture by the user.
-                latitudeE7 = review.location?.latitudeE7 ?: existing.latitudeE7,
-                longitudeE7 = review.location?.longitudeE7 ?: existing.longitudeE7,
                 payeeId = payeeId,
                 updatedAt = now,
             )
@@ -509,8 +505,6 @@ class RoomReceiptRepository(
             name = name,
             normalizedName = TextKeys.storeKey(name),
             address = address,
-            latitudeE7 = review.location?.latitudeE7,
-            longitudeE7 = review.location?.longitudeE7,
             payeeId = payeeId,
             createdAt = now,
             updatedAt = now,
@@ -607,8 +601,6 @@ class RoomReceiptRepository(
         totalCents = review.total?.cents,
         receiptNumber = review.receiptNumber.trim(),
         defaultCategoryId = review.defaultCategoryId,
-        latitudeE7 = review.location?.latitudeE7,
-        longitudeE7 = review.location?.longitudeE7,
     )
 
     private fun ReceiptEntity.toReview(items: List<ReceiptItemEntity>) = ReceiptReview(
@@ -623,7 +615,6 @@ class RoomReceiptRepository(
         receiptNumber = receiptNumber,
         defaultCategoryId = defaultCategoryId,
         items = items.map { it.toDraft() },
-        location = if (latitudeE7 != null && longitudeE7 != null) GeoPoint(latitudeE7, longitudeE7) else null,
     )
 
     private fun parseSources(text: String): Map<ReceiptField, OcrSource> =
@@ -756,7 +747,6 @@ class RoomProductRepository(
                     id = it.id,
                     name = it.name,
                     address = it.address,
-                    location = if (it.latitudeE7 != null && it.longitudeE7 != null) GeoPoint(it.latitudeE7, it.longitudeE7) else null,
                 )
             }
         }

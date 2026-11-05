@@ -78,12 +78,7 @@ data class ReceiptReview(
     /** Used for items without their own category. */
     val defaultCategoryId: Long? = null,
     val items: List<ReceiptItemDraft> = emptyList(),
-    /** Optional, captured only when the user asks for it. */
-    val location: GeoPoint? = null,
 )
-
-/** Coordinates in degrees x 10^7, stored as whole numbers. */
-data class GeoPoint(val latitudeE7: Long, val longitudeE7: Long)
 
 data class ReceiptPage(val imageId: Long, val page: Int, val width: Int, val height: Int)
 
@@ -186,7 +181,6 @@ data class Store(
     val id: Long,
     val name: String,
     val address: String?,
-    val location: GeoPoint?,
 )
 
 data class Product(

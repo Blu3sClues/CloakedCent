@@ -1,6 +1,14 @@
 package com.cloakedcent.app.ui.feature.settings
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -42,6 +50,48 @@ class AcknowledgementsTest {
         compose.onNodeWithText("Open-source licences").performScrollTo().performClick()
         assertEquals(1, opened)
     }
+
+    @Test
+    fun settingsOpensTheProjectLicense() {
+        var opened = 0
+        compose.setContent {
+            CloakedCentTheme { SettingsScreen(ThemeMode.SYSTEM, {}, {}, onLicenseInformation = { opened++ }) }
+        }
+        compose.onNodeWithText("License Information").performScrollTo().performClick()
+        assertEquals(1, opened)
+    }
+
+    @Test
+    fun licenseInformationShowsTheApacheLicense() {
+        compose.setContent { CloakedCentTheme { LicenseInformationRoute(onBack = {}) } }
+        compose.onNodeWithText("License Information").assertIsDisplayed()
+        compose.onNodeWithText("CloakedCent is licensed under the Apache License 2.0.").assertIsDisplayed()
+        compose.onNodeWithText("TERMS AND CONDITIONS FOR USE", substring = true).assertExists()
+    }
+
+    @Test
+    fun secureDeleteNeedsTheExactWordAndWarnsAboutBackups() {
+        var deleted = 0
+        compose.setContent {
+            CloakedCentTheme { SettingsScreen(ThemeMode.SYSTEM, {}, {}, onSecureDelete = { deleted++ }) }
+        }
+        compose.onNodeWithText("It can only be restored if you took a backup beforehand", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Secure delete").performScrollTo().performClick()
+        compose.onNodeWithText("cannot be undone", substring = true).assertIsDisplayed()
+
+        val confirm = compose.onNode(hasText("Secure delete") and hasClickAction() and isInDialog())
+        confirm.assertIsNotEnabled()
+        val field = compose.onNode(hasSetTextAction())
+        listOf("confirm", "CONFIRM ", "CONFIR").forEach { wrong ->
+            field.performTextReplacement(wrong)
+            confirm.assertIsNotEnabled()
+        }
+        field.performTextReplacement("CONFIRM")
+        confirm.assertIsEnabled().performClick()
+        assertEquals(1, deleted)
+    }
+
+    private fun isInDialog() = hasAnyAncestor(isDialog())
 
     @Test
     fun tappingAnEntryShowsItsFullLicence() {

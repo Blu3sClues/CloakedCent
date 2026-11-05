@@ -52,6 +52,10 @@ class AndroidKeystoreKeyWrapper(
         }
     }
 
+    override fun destroy() = keystoreCall {
+        KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }.deleteEntry(alias)
+    }
+
     private fun existingKey(): SecretKey? {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
         return (keyStore.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.secretKey

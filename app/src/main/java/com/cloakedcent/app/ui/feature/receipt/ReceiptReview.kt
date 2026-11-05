@@ -1,8 +1,6 @@
 package com.cloakedcent.app.ui.feature.receipt
 
 import android.graphics.BitmapFactory
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -44,7 +42,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,7 +54,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -81,7 +77,6 @@ import com.cloakedcent.app.domain.model.CategoryKind
 import com.cloakedcent.app.domain.model.ConfirmTarget
 import com.cloakedcent.app.domain.model.DuplicateWarning
 import com.cloakedcent.app.domain.model.ExpenseMatch
-import com.cloakedcent.app.domain.model.GeoPoint
 import com.cloakedcent.app.domain.model.MeasureUnit
 import com.cloakedcent.app.domain.model.OcrSource
 import com.cloakedcent.app.domain.model.ReceiptDetail
@@ -204,7 +199,6 @@ data class ReviewForm(
     val total: String = "",
     val defaultCategoryId: Long? = null,
     val items: List<ItemForm> = emptyList(),
-    val location: GeoPoint? = null,
     /** The total as read from the receipt, kept for comparison when items are corrected. */
     val printedTotal: Money? = null,
 )
@@ -383,7 +377,6 @@ class ReceiptReviewViewModel(
                     source = item.source,
                 )
             },
-            location = r.location,
             printedTotal = r.total,
         )
     }
@@ -410,10 +403,6 @@ class ReceiptReviewViewModel(
     fun choose(choice: ExpenseChoice) = _state.update { it.copy(choice = choice, replaceAmount = false, message = null) }
 
     fun setReplaceAmount(on: Boolean) = _state.update { it.copy(replaceAmount = on) }
-
-    fun setLocation(point: GeoPoint?) = edit { it.copy(location = point) }
-
-    fun showMessage(id: Int) = _state.update { it.copy(message = id) }
 
     fun save() = run { review ->
         receipts.saveReview(receiptId, review)
@@ -574,7 +563,6 @@ private fun ReviewForm.toReview(): ReceiptReview {
                 source = item.source,
             )
         },
-        location = location,
     )
 }
 
@@ -812,7 +800,6 @@ private fun ReviewEditor(state: ReviewUiState, vm: ReceiptReviewViewModel, onOpe
         label = { Text(stringResource(R.string.field_store_address)) },
         modifier = focusOn(ReceiptField.ADDRESS),
     )
-    LocationRow(form.location, onLocation = { vm.setLocation(it) }, onMessage = vm::showMessage)
     DateField(stringResource(R.string.field_date), form.date, { d -> vm.edit { it.copy(date = d) } })
     if (ReceiptField.DATE in uncertain) Text(check, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1033,44 +1020,6 @@ private fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         RadioButton(selected = selected, onClick = null)
         Text(label, Modifier.padding(start = 8.dp))
-    }
-}
-
-@Composable
-private fun LocationRow(location: GeoPoint?, onLocation: (GeoPoint?) -> Unit, onMessage: (Int) -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var finding by remember { mutableStateOf(false) }
-    fun capture() {
-        finding = true
-        scope.launch {
-            val point = StoreLocation.capture(context)
-            finding = false
-            if (point != null) onLocation(point) else onMessage(R.string.review_location_unavailable)
-        }
-    }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
-        if (results.values.any { it }) capture() else onMessage(R.string.review_location_denied)
-    }
-    Column {
-        Text(stringResource(R.string.review_location), style = MaterialTheme.typography.titleSmall)
-        Text(stringResource(R.string.review_location_hint), style = MaterialTheme.typography.bodySmall)
-        when {
-            finding -> Text(stringResource(R.string.review_location_finding))
-            location != null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    stringResource(R.string.review_location_set, "%.5f".format(location.latitudeE7 / 1e7), "%.5f".format(location.longitudeE7 / 1e7)),
-                    Modifier.weight(1f),
-                )
-                TextButton(onClick = { onLocation(null) }) { Text(stringResource(R.string.review_location_remove)) }
-            }
-            else -> TextButton(onClick = {
-                if (StoreLocation.hasPermission(context)) capture() else permission.launch(StoreLocation.PERMISSIONS)
-            }) {
-                Icon(painterResource(R.drawable.ic_location), null)
-                Text(stringResource(R.string.review_location_capture), Modifier.padding(start = 8.dp))
-            }
-        }
     }
 }
 

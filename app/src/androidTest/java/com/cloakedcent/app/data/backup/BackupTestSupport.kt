@@ -22,7 +22,11 @@ import javax.crypto.spec.SecretKeySpec
 
 /** Stands in for an Android Keystore key: each instance is a different device/installation. */
 class FakeKeystoreWrapper : KeyWrapper {
-    private val key = SecretKeySpec(ByteArray(32).also(SecureRandom()::nextBytes), "AES")
+    private var key = SecretKeySpec(ByteArray(32).also(SecureRandom()::nextBytes), "AES")
+
+    override fun destroy() {
+        key = SecretKeySpec(ByteArray(32).also(SecureRandom()::nextBytes), "AES")
+    }
 
     override fun wrap(plaintext: ByteArray): ByteArray {
         val iv = ByteArray(12).also(SecureRandom()::nextBytes)

@@ -349,8 +349,22 @@ object Migrations {
         }
     }
 
+    /** Location capture is gone, so the coordinates it saved are erased, not just hidden. */
+    val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            listOf("stores", "receipts").forEach { table ->
+                db.execSQL("ALTER TABLE $table DROP COLUMN latitude_e7")
+                db.execSQL("ALTER TABLE $table DROP COLUMN longitude_e7")
+            }
+            db.execSQL(
+                "INSERT OR REPLACE INTO app_metadata (meta_key, meta_value) VALUES (?, '1')",
+                arrayOf<Any>(AppMetadataKeys.VACUUM_PENDING),
+            )
+        }
+    }
+
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-        MIGRATION_9_10, MIGRATION_10_11,
+        MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
     )
 }

@@ -2,6 +2,14 @@ package com.cloakedcent.app.ui.feature.settings
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import com.cloakedcent.app.ui.feature.backup.restartApp
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -55,7 +64,21 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(
     private val settings: SettingsRepository,
     private val storage: StorageRepository,
+    private val scheduleSecureDelete: suspend () -> Unit,
 ) : ViewModel() {
+    private val _secureDeleteFailed = MutableStateFlow(false)
+    val secureDeleteFailed: StateFlow<Boolean> = _secureDeleteFailed.asStateFlow()
+
+    /** [restart] runs once the delete is safely recorded; it is carried out as the app starts again. */
+    fun secureDelete(restart: () -> Unit) {
+        viewModelScope.launch {
+            _secureDeleteFailed.value = false
+            runCatching { scheduleSecureDelete() }
+                .onSuccess { restart() }
+                .onFailure { _secureDeleteFailed.value = true }
+        }
+    }
+
     val themeMode: StateFlow<ThemeMode> = settings.themeMode
     fun setThemeMode(mode: ThemeMode) = settings.setThemeMode(mode)
 
@@ -78,7 +101,7 @@ class SettingsViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val container = (this[APPLICATION_KEY] as CloakedCentApp).container
-                SettingsViewModel(container.settingsRepository, container.storageRepository)
+                SettingsViewModel(container.settingsRepository, container.storageRepository, container::scheduleSecureDelete)
             }
         }
     }
@@ -91,8 +114,11 @@ fun SettingsRoute(
     onRestore: () -> Unit = {},
     onLicences: () -> Unit = {},
     onCategories: () -> Unit = {},
+    onLicenseInformation: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory),
 ) {
+    val context = LocalContext.current
+    val secureDeleteFailed by viewModel.secureDeleteFailed.collectAsStateWithLifecycle()
     val mode by viewModel.themeMode.collectAsStateWithLifecycle()
     val cipherVersion by viewModel.cipherVersion.collectAsStateWithLifecycle()
     val keepReceiptImages by viewModel.keepReceiptImages.collectAsStateWithLifecycle()
@@ -107,6 +133,9 @@ fun SettingsRoute(
         keepReceiptImages,
         viewModel::setKeepReceiptImages,
         onCategories,
+        onLicenseInformation,
+        { viewModel.secureDelete { restartApp(context) } },
+        secureDeleteFailed,
     )
 }
 
@@ -122,6 +151,9 @@ fun SettingsScreen(
     keepReceiptImages: Boolean = true,
     onKeepReceiptImagesChange: (Boolean) -> Unit = {},
     onCategories: () -> Unit = {},
+    onLicenseInformation: () -> Unit = {},
+    onSecureDelete: () -> Unit = {},
+    secureDeleteFailed: Boolean = false,
 ) {
     Scaffold(topBar = { BackTopBar(stringResource(R.string.settings_title), onBack) }) { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -208,9 +240,85 @@ fun SettingsScreen(
             OutlinedButton(onClick = onLicences, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Text(stringResource(R.string.settings_licences))
             }
+            OutlinedButton(onClick = onLicenseInformation, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text(stringResource(R.string.settings_license_information))
+            }
+
+            var confirmingSecureDelete by rememberSaveable { mutableStateOf(false) }
+            Button(
+                onClick = { confirmingSecureDelete = true },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SecureDeleteRed,
+                    contentColor = Color.White,
+                ),
+                modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+            ) {
+                Text(stringResource(R.string.settings_secure_delete))
+            }
+            Text(
+                stringResource(R.string.settings_secure_delete_disclaimer),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            if (secureDeleteFailed) {
+                Text(
+                    stringResource(R.string.settings_secure_delete_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            if (confirmingSecureDelete) {
+                SecureDeleteDialog(
+                    onConfirm = {
+                        confirmingSecureDelete = false
+                        onSecureDelete()
+                    },
+                    onDismiss = { confirmingSecureDelete = false },
+                )
+            }
         }
     }
 }
+
+/** The word must be typed exactly, so this cannot be confirmed by accident. */
+@Composable
+private fun SecureDeleteDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    var typed by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.secure_delete_confirm_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.secure_delete_confirm_body))
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { typed = it },
+                    label = { Text(stringResource(R.string.secure_delete_confirm_field)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, autoCorrectEnabled = false),
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = typed == SECURE_DELETE_WORD,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) {
+                Text(stringResource(R.string.settings_secure_delete))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+private const val SECURE_DELETE_WORD = "CONFIRM"
+
+/** The theme's error colour is a pale pink in dark mode; this stays red in both themes. */
+private val SecureDeleteRed = Color(0xFFC62828)
 
 @Composable
 private fun AppVersion() {

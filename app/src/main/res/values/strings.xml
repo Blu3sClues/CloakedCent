@@ -435,14 +435,6 @@
     <string name="review_open_other">Open it</string>
     <string name="review_confirmed_info">Confirmed. This receipt is attached to its expense.</string>
     <string name="review_open_expense">Open expense</string>
-    <string name="review_location">Store location</string>
-    <string name="review_location_hint">Optional. Saved with the store only if you ask. No map service is used.</string>
-    <string name="review_location_capture">Use current location</string>
-    <string name="review_location_finding">Finding location…</string>
-    <string name="review_location_set">Location saved: %1$s, %2$s</string>
-    <string name="review_location_remove">Remove</string>
-    <string name="review_location_denied">Location permission was not granted. Receipts work without it.</string>
-    <string name="review_location_unavailable">No location fix. Turn on location services and try again.</string>
     <string name="review_page_description">Receipt page %1$d</string>
     <string name="error_receipt_store">Enter the store name.</string>
     <string name="error_receipt_date">Enter the purchase date.</string>
@@ -617,6 +609,14 @@
     <string name="settings_version">Version %1$s</string>
     <string name="settings_licences">Open-source licences</string>
     <string name="acknowledgements_title">Open-source licences</string>
+    <string name="settings_license_information">License Information</string>
+    <string name="license_information_intro">CloakedCent is licensed under the Apache License 2.0.</string>
+    <string name="settings_secure_delete">Secure delete</string>
+    <string name="settings_secure_delete_disclaimer">All of your information will be deleted from this device. It can only be restored if you took a backup beforehand.</string>
+    <string name="settings_secure_delete_failed">Secure delete could not start. Nothing was deleted. Try again.</string>
+    <string name="secure_delete_confirm_title">Delete all information?</string>
+    <string name="secure_delete_confirm_body">This permanently deletes every account, transaction, budget, receipt and setting on this device, and cannot be undone. You can only get them back from a backup you took beforehand.</string>
+    <string name="secure_delete_confirm_field">Type CONFIRM to continue</string>
     <string name="nav_home">Home</string>
     <string name="acknowledgements_intro">CloakedCent is built with the following open-source software. Tap an entry to read its licence.</string>
 </resources>
