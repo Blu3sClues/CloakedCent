@@ -11,6 +11,7 @@ import com.pocketbudget.app.domain.model.NewTransaction
 import com.pocketbudget.app.domain.model.NewTransfer
 import com.pocketbudget.app.domain.model.PeriodSummary
 import com.pocketbudget.app.domain.model.TransactionEdit
+import com.pocketbudget.app.domain.model.TransactionFilter
 import com.pocketbudget.app.domain.model.TransactionStatus
 import com.pocketbudget.app.domain.model.TransactionStatus.COMPLETED
 import com.pocketbudget.app.domain.model.TransactionStatus.RECEIVED
@@ -134,6 +135,29 @@ class TransactionRepositoryTest {
         val history = t.db.transactionDao().getRevisions(id).single()
         assertEquals(RevisionAction.STATUS_CHANGE, history.action)
         assertEquals(SCHEDULED, history.status)
+    }
+
+    @Test
+    fun scheduledEntriesJoinRecentActivityOnlyOnceConfirmed() = runTest {
+        val a = account("A", 10_000)
+        val b = account("B")
+        val done = t.ledger.record(entry("done", a, EXPENSE, 100))
+        val bill = t.ledger.record(entry("bill", a, EXPENSE, 2_500, scheduled = true))
+        val plan = t.ledger.recordTransfer(transfer("plan", a, b, 4_000, scheduled = true))
+        val leg = t.db.transactionDao().getTransferLegs(plan).first().id
+        suspend fun recent() = t.ledger.observeRecent(10).first().map { it.id }.toSet()
+        suspend fun scheduled() = t.ledger.search(TransactionFilter(scheduled = true)).first().map { it.id }.toSet()
+
+        assertEquals(setOf(done), recent())
+        assertEquals(setOf(bill, leg), scheduled())
+
+        t.ledger.confirm(bill)
+        assertEquals(setOf(done, bill), recent())
+        assertEquals(setOf(leg), scheduled())
+
+        t.ledger.confirm(leg)
+        assertEquals(setOf(done, bill, leg), recent())
+        assertEquals(emptySet<Long>(), scheduled())
     }
 
     @Test

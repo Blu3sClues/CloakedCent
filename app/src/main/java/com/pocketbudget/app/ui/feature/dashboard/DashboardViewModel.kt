@@ -48,6 +48,8 @@ sealed interface DashboardUiState {
         val budgets: List<BudgetProgress> = emptyList(),
         /** Scheduled entries dated before today. */
         val overdueCount: Int = 0,
+        /** Scheduled entries awaiting confirmation, soonest first. */
+        val upcoming: List<TransactionListItem> = emptyList(),
     ) : DashboardUiState
 }
 
@@ -111,6 +113,7 @@ class DashboardViewModel(
                     canLoadSampleData = sampleSeeder != null && accounts.isEmpty(),
                     budgets = budgets.filter { it.budget.state == BudgetState.ACTIVE },
                     overdueCount = scheduled.count { it.occurredOn.isBefore(LocalDate.now(clock)) },
+                    upcoming = scheduled.sortedWith(compareBy({ it.occurredOn }, { it.id })),
                 )
             }
                 .catch { _uiState.value = DashboardUiState.Error(Reason.UNKNOWN) }

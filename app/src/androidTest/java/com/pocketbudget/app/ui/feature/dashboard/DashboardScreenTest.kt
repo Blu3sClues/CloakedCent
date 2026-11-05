@@ -1,6 +1,7 @@
 package com.pocketbudget.app.ui.feature.dashboard
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -41,7 +42,9 @@ class DashboardScreenTest {
         accounts: List<AccountBalance> = emptyList(),
         recent: List<TransactionListItem> = emptyList(),
         canLoadSampleData: Boolean = false,
+        upcoming: List<TransactionListItem> = emptyList(),
     ) = DashboardUiState.Ready(
+        upcoming = upcoming,
         storage = StorageStatus(null, "4.x community"),
         totals = ConsolidatedBalance.ZERO,
         accounts = accounts,
@@ -56,20 +59,38 @@ class DashboardScreenTest {
         show(
             ready(
                 accounts = listOf(AccountBalance(checking, Money(1_000), Money(500))),
-                recent = listOf(
-                    TransactionListItem(
-                        id = 1, type = TransactionType.TRANSFER, status = TransactionStatus.SCHEDULED,
-                        amount = Money(-500), occurredOn = LocalDate.of(2026, 11, 20),
-                        accountName = "Everyday checking", categoryName = null, payeeName = null,
-                        counterpartAccountName = "Savings",
-                    ),
-                ),
+                upcoming = listOf(scheduledTransfer),
             ),
         )
 
         composeRule.onNodeWithText("Everyday checking").assertIsDisplayed()
         composeRule.onNodeWithText("Transfer to Savings").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Scheduled").performScrollTo().assertIsDisplayed()
+    }
+
+    private val scheduledTransfer = TransactionListItem(
+        id = 1, type = TransactionType.TRANSFER, status = TransactionStatus.SCHEDULED,
+        amount = Money(-500), occurredOn = LocalDate.of(2026, 11, 20),
+        accountName = "Everyday checking", categoryName = null, payeeName = null,
+        counterpartAccountName = "Savings",
+    )
+
+    @Test
+    fun upcomingActivitySitsBetweenAccountsAndRecentActivity() {
+        show(ready(upcoming = listOf(scheduledTransfer)))
+
+        fun top(text: String) = composeRule.onNodeWithText(text).getUnclippedBoundsInRoot().top
+        assertTrue(top("Accounts") < top("Upcoming activity"))
+        assertTrue(top("Upcoming activity") < top("Transfer to Savings"))
+        assertTrue(top("Transfer to Savings") < top("Recent activity"))
+    }
+
+    @Test
+    fun upcomingActivityIsHiddenWithNothingScheduled() {
+        show(ready())
+
+        composeRule.onNodeWithText("Upcoming activity").assertDoesNotExist()
+        composeRule.onNodeWithText("Recent activity").assertExists()
     }
 
     @Test

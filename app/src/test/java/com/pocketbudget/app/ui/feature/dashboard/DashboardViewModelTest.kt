@@ -12,6 +12,8 @@ import com.pocketbudget.app.domain.model.TransactionDetail
 import com.pocketbudget.app.domain.model.TransactionEdit
 import com.pocketbudget.app.domain.model.TransactionFilter
 import com.pocketbudget.app.domain.model.TransactionListItem
+import com.pocketbudget.app.domain.model.TransactionStatus
+import com.pocketbudget.app.domain.model.TransactionType
 import com.pocketbudget.app.domain.repository.AccountRepository
 import com.pocketbudget.app.domain.repository.StorageRepository
 import com.pocketbudget.app.domain.repository.StorageUnavailableException
@@ -100,6 +102,23 @@ class DashboardViewModelTest {
     }
 
     @Test
+    fun `upcoming activity lists scheduled entries soonest first`() = runTest(dispatcher) {
+        fun scheduled(id: Long, date: String) = TransactionListItem(
+            id = id, type = TransactionType.EXPENSE, status = TransactionStatus.SCHEDULED, amount = Money(-100),
+            occurredOn = LocalDate.parse(date), accountName = "Checking", categoryName = null, payeeName = null,
+            counterpartAccountName = null,
+        )
+        // The search returns newest first.
+        transactions.scheduled = listOf(scheduled(3, "2026-11-20"), scheduled(2, "2026-11-16"), scheduled(1, "2026-11-10"))
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        val ready = vm.uiState.value as DashboardUiState.Ready
+        assertEquals(listOf(1L, 2L, 3L), ready.upcoming.map { it.id })
+        assertEquals(1, ready.overdueCount)
+    }
+
+    @Test
     fun `storage failure is shown and ledger is not queried`() = runTest(dispatcher) {
         val vm = viewModel(storageRepository { throw StorageUnavailableException(Reason.KEY_MISSING) })
         advanceUntilIdle()
@@ -122,6 +141,7 @@ class DashboardViewModelTest {
     private class FakeTransactionRepository : TransactionRepository {
         val summary = PeriodSummary(Money(10_000), Money(2_500))
         var requestedRange: Pair<LocalDate, LocalDate>? = null
+        var scheduled: List<TransactionListItem> = emptyList()
 
         override suspend fun record(transaction: NewTransaction) = 0L
         override suspend fun recordTransfer(transfer: NewTransfer) = 0L
@@ -130,7 +150,7 @@ class DashboardViewModelTest {
         override suspend fun confirm(id: Long, actualAmount: Money?) = false
         override suspend fun adjustBalance(adjustment: com.pocketbudget.app.domain.model.NewAdjustment) = 0L
         override fun observeRecent(limit: Int): Flow<List<TransactionListItem>> = flowOf(emptyList())
-        override fun search(filter: TransactionFilter): Flow<List<TransactionListItem>> = flowOf(emptyList())
+        override fun search(filter: TransactionFilter): Flow<List<TransactionListItem>> = flowOf(scheduled)
         override fun observeDetail(id: Long): Flow<TransactionDetail?> = flowOf(null)
         override fun observePeriodSummary(start: LocalDate, endInclusive: LocalDate): Flow<PeriodSummary> {
             requestedRange = start to endInclusive

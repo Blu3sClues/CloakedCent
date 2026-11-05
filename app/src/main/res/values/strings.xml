@@ -13,6 +13,7 @@
     <string name="dashboard_income_month">Income this month</string>
     <string name="dashboard_spent_month">Spent this month</string>
     <string name="dashboard_accounts">Accounts</string>
+    <string name="dashboard_upcoming">Upcoming activity</string>
     <string name="dashboard_recent">Recent activity</string>
     <string name="dashboard_no_accounts_title">No accounts yet</string>
     <string name="dashboard_no_accounts_body">Add an account to start recording income, expenses and transfers. Everything stays encrypted on this device.</string>

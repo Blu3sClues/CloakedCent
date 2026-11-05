@@ -114,7 +114,7 @@ interface TransactionRepository {
     /** Records a balance correction as a new ledger entry; idempotent on requestId. Returns the entry id. */
     suspend fun adjustBalance(adjustment: NewAdjustment): Long
 
-    /** Most recent entries; transfers appear once (outgoing leg). */
+    /** Most recent entries, without scheduled ones until they are confirmed; transfers appear once (outgoing leg). */
     fun observeRecent(limit: Int): Flow<List<TransactionListItem>>
 
     fun observePeriodSummary(start: LocalDate, endInclusive: LocalDate): Flow<PeriodSummary>

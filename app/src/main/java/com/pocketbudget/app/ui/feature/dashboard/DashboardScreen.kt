@@ -229,6 +229,11 @@ private fun ReadyContent(state: DashboardUiState.Ready, actions: DashboardAction
         ListCard(state.accounts) { AccountRow(it, Modifier.clickable { actions.onOpenAccount(it.account.id) }) }
     }
 
+    if (state.upcoming.isNotEmpty()) {
+        SectionHeader(stringResource(R.string.dashboard_upcoming))
+        ListCard(state.upcoming) { TransactionRow(it, Modifier.clickable { actions.onOpenTransaction(it.id) }) }
+    }
+
     SectionHeader(
         stringResource(R.string.dashboard_recent),
         actionLabel = stringResource(R.string.action_see_all).takeIf { state.recent.isNotEmpty() },

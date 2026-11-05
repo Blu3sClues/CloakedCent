@@ -225,7 +225,7 @@ interface TransactionDao {
     @Query(
         """
         $LIST_SELECT
-        WHERE t.is_deleted = 0 AND NOT (t.type = 'TRANSFER' AND t.amount_cents > 0)
+        WHERE t.is_deleted = 0 AND t.status <> 'SCHEDULED' AND NOT (t.type = 'TRANSFER' AND t.amount_cents > 0)
         ORDER BY t.occurred_on DESC, t.id DESC
         LIMIT :limit
         """,
