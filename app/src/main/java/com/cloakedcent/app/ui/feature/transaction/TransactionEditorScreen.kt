@@ -1,8 +1,10 @@
 package com.cloakedcent.app.ui.feature.transaction
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -13,6 +15,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -20,14 +24,20 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
@@ -63,6 +73,13 @@ fun TransactionEditorRoute(
             onPayeeChange = viewModel::onPayeeChange,
             onNoteChange = viewModel::onNoteChange,
             onScheduledChange = viewModel::onScheduledChange,
+            onOptionsToggle = viewModel::onOptionsToggle,
+            onTaxChange = viewModel::onTaxChange,
+            onStoreLocationChange = viewModel::onStoreLocationChange,
+            onAddItem = viewModel::onAddItem,
+            onRemoveItem = viewModel::onRemoveItem,
+            onItemNameChange = viewModel::onItemNameChange,
+            onItemPriceChange = viewModel::onItemPriceChange,
             onSave = viewModel::save,
         ),
     )
@@ -79,6 +96,13 @@ class TransactionEditorActions(
     val onPayeeChange: (String) -> Unit = {},
     val onNoteChange: (String) -> Unit = {},
     val onScheduledChange: (Boolean) -> Unit = {},
+    val onOptionsToggle: () -> Unit = {},
+    val onTaxChange: (String) -> Unit = {},
+    val onStoreLocationChange: (String) -> Unit = {},
+    val onAddItem: () -> Unit = {},
+    val onRemoveItem: (Int) -> Unit = {},
+    val onItemNameChange: (Int, String) -> Unit = { _, _ -> },
+    val onItemPriceChange: (Int, String) -> Unit = { _, _ -> },
     val onSave: () -> Unit = {},
 )
 
@@ -170,6 +194,7 @@ fun TransactionEditorScreen(state: TransactionEditorState, actions: TransactionE
                     ),
                 )
             }
+            if (state.hasAdditionalOptions) AdditionalOptions(state, actions)
             state.error?.let {
                 Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
@@ -178,6 +203,73 @@ fun TransactionEditorScreen(state: TransactionEditorState, actions: TransactionE
                 enabled = !state.saving && !state.loading,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.action_save)) }
+        }
+    }
+}
+
+/** Rolled up until opened. Everything here is optional; the only error is spending more than the expense. */
+@Composable
+private fun AdditionalOptions(state: TransactionEditorState, actions: TransactionEditorActions) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClick = actions.onOptionsToggle)
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.additional_options),
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Icon(
+                painterResource(R.drawable.ic_arrow_drop_down),
+                contentDescription = null,
+                modifier = Modifier.rotate(if (state.optionsExpanded) 180f else 0f),
+            )
+        }
+        if (state.optionsExpanded) {
+            MoneyField(state.tax, actions.onTaxChange, stringResource(R.string.field_tax))
+            state.items.forEach { item ->
+                key(item.key) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = item.name,
+                            onValueChange = { actions.onItemNameChange(item.key, it) },
+                            label = { Text(stringResource(R.string.field_item_name)) },
+                            singleLine = true,
+                            modifier = Modifier.weight(0.58f),
+                        )
+                        MoneyField(
+                            item.price,
+                            { actions.onItemPriceChange(item.key, it) },
+                            stringResource(R.string.field_item_price),
+                            Modifier.weight(0.42f),
+                        )
+                        IconButton(onClick = { actions.onRemoveItem(item.key) }) {
+                            Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.review_remove_item))
+                        }
+                    }
+                }
+            }
+            TextButton(onClick = actions.onAddItem) {
+                Icon(painterResource(R.drawable.ic_add), null)
+                Text(stringResource(R.string.review_add_item), Modifier.padding(start = 8.dp))
+            }
+            OutlinedTextField(
+                value = state.storeLocation,
+                onValueChange = actions.onStoreLocationChange,
+                label = { Text(stringResource(R.string.field_store_location)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (state.optionsExceedAmount) {
+            Text(
+                stringResource(R.string.error_options_exceed_amount),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+            )
         }
     }
 }

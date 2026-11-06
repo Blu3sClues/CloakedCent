@@ -80,6 +80,14 @@ data class ReceiptReview(
     val items: List<ReceiptItemDraft> = emptyList(),
 )
 
+/** An item entered with a new expense. A blank name or a zero price means it was left out. */
+data class ExpenseItem(val name: String, val price: Money = Money.ZERO)
+
+/** The optional details of a new expense, kept as a confirmed receipt with no image. */
+data class ExpenseDetails(val tax: Money = Money.ZERO, val items: List<ExpenseItem> = emptyList(), val storeAddress: String = "") {
+    val isEmpty: Boolean get() = !tax.isPositive && items.isEmpty() && storeAddress.isBlank()
+}
+
 data class ReceiptPage(val imageId: Long, val page: Int, val width: Int, val height: Int)
 
 data class ReceiptDetail(

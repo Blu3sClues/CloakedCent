@@ -405,6 +405,13 @@ so every balance comes from a single source and nothing can be double counted.
   products. Periods: 7, 30 or 90 days; this or last month; this or last year; all
   time; or a custom range. Each period is compared with the equally long period
   before it.
+- **Additional Options** on a new expense add tax, items and a store location, all optional.
+  They are saved with the expense as a confirmed receipt with no image, so they reach store
+  and product analysis. The payee names the store; without one the address is kept but no
+  store is created. Tax and items may not exceed the expense, but need not reach it: the
+  whole expense stays in its category. Items with no name or no price stay out of price
+  history, and a scheduled expense counts only once it is spent. As with any receipt, the
+  expense's amount can no longer change.
 - **Category transactions.** A category's page lists up to 30 of its expenses in the period,
   subcategories included: largest first, then newest. A split expense shows only its part in
   the category. Refunds are not listed, so a category with refunds can list more than its total.

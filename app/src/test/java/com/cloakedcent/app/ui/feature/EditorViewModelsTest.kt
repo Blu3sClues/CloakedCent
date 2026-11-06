@@ -10,6 +10,9 @@ import com.cloakedcent.app.domain.model.LedgerException
 import com.cloakedcent.app.domain.model.TransactionDetail
 import com.cloakedcent.app.domain.model.TransactionFilter
 import com.cloakedcent.app.domain.model.TransactionStatus
+import com.cloakedcent.app.domain.model.ExpenseDetails
+import com.cloakedcent.app.domain.model.ExpenseItem
+import com.cloakedcent.app.domain.model.NewTransaction
 import com.cloakedcent.app.domain.model.TransactionType
 import com.cloakedcent.app.testing.FakeLedger
 import com.cloakedcent.app.ui.feature.account.AccountEditorViewModel
@@ -44,6 +47,7 @@ class EditorViewModelsTest {
 
     private val dispatcher = StandardTestDispatcher()
     private val ledger = FakeLedger()
+    private val withDetails = mutableListOf<Triple<NewTransaction, String, ExpenseDetails>>()
     private val clock = Clock.fixed(Instant.parse("2026-11-15T12:00:00Z"), ZoneOffset.UTC)
 
     private val originalLocale = Locale.getDefault()
@@ -66,8 +70,134 @@ class EditorViewModelsTest {
         handle: SavedStateHandle = SavedStateHandle(),
     ) = TransactionEditorViewModel(
         id, type, handle, ledger.accountRepository, ledger.categoryRepository,
-        ledger.payeeRepository, ledger.transactionRepository, clock,
+        ledger.payeeRepository, ledger.transactionRepository,
+        { expense, store, details -> withDetails += Triple(expense, store, details); 1L },
+        clock,
     )
+
+    private suspend fun readyExpense(amount: String = "50") = editor().also { vm ->
+        vm.onAccountChange(1)
+        vm.onAmountChange(amount)
+    }
+
+    @Test
+    fun `additional options start rolled up and an untouched menu records a plain expense`() = runTest(dispatcher) {
+        val vm = readyExpense()
+        advanceUntilIdle()
+        assertFalse(vm.state.value.optionsExpanded)
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertEquals(1, ledger.recorded.size)
+        assertTrue(withDetails.isEmpty())
+        assertTrue(vm.state.value.finished)
+    }
+
+    @Test
+    fun `additional options are saved with the payee as the store`() = runTest(dispatcher) {
+        val vm = readyExpense()
+        advanceUntilIdle()
+        vm.onPayeeChange(" Fresh Market ")
+        vm.onTaxChange("5")
+        vm.onStoreLocationChange(" 1 Main St ")
+        vm.onAddItem()
+        vm.onAddItem()
+        vm.onAddItem()
+        val (milk, unnamed, blank) = vm.state.value.items.map { it.key }
+        vm.onItemNameChange(milk, " Milk ")
+        vm.onItemPriceChange(milk, "20")
+        vm.onItemPriceChange(unnamed, "10")
+        assertEquals(blank, vm.state.value.items.last().key)
+        vm.save()
+        advanceUntilIdle()
+
+        val (expense, store, details) = withDetails.single()
+        assertEquals(Money(5_000), expense.amount)
+        assertEquals("Fresh Market", store)
+        assertEquals(Money(500), details.tax)
+        assertEquals("1 Main St", details.storeAddress)
+        assertEquals("a completely blank row is left out", listOf(ExpenseItem("Milk", Money(2_000)), ExpenseItem("", Money(1_000))), details.items)
+        assertTrue(ledger.recorded.isEmpty())
+        assertTrue(vm.state.value.finished)
+    }
+
+    @Test
+    fun `only exceeding the amount is an error in additional options`() = runTest(dispatcher) {
+        val vm = readyExpense()
+        advanceUntilIdle()
+        vm.onAddItem()
+        val item = vm.state.value.items.single().key
+
+        vm.onItemPriceChange(item, "45")
+        vm.onTaxChange("5")
+        assertFalse("exactly the amount is fine", vm.state.value.optionsExceedAmount)
+
+        vm.onTaxChange("5.01")
+        assertTrue(vm.state.value.optionsExceedAmount)
+
+        vm.onTaxChange("not a number")
+        vm.onItemNameChange(item, "")
+        assertFalse("anything unreadable counts as left blank", vm.state.value.optionsExceedAmount)
+
+        vm.onAmountChange("")
+        vm.onTaxChange("999")
+        assertFalse("there is no amount to compare with", vm.state.value.optionsExceedAmount)
+    }
+
+    @Test
+    fun `saving over the amount is refused and opens the rolled up menu`() = runTest(dispatcher) {
+        val vm = readyExpense()
+        advanceUntilIdle()
+        vm.onOptionsToggle()
+        vm.onTaxChange("60")
+        vm.onOptionsToggle()
+        assertFalse(vm.state.value.optionsExpanded)
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.state.value.optionsExpanded)
+        assertFalse(vm.state.value.finished)
+        assertTrue(ledger.recorded.isEmpty())
+        assertTrue(withDetails.isEmpty())
+
+        vm.onTaxChange("50")
+        vm.save()
+        advanceUntilIdle()
+        assertEquals(1, withDetails.size)
+    }
+
+    @Test
+    fun `removing an item takes its price out of the limit`() = runTest(dispatcher) {
+        val vm = readyExpense()
+        advanceUntilIdle()
+        vm.onAddItem()
+        val key = vm.state.value.items.single().key
+        vm.onItemPriceChange(key, "60")
+        assertTrue(vm.state.value.optionsExceedAmount)
+
+        vm.onRemoveItem(key)
+
+        assertFalse(vm.state.value.optionsExceedAmount)
+        assertTrue(vm.state.value.items.isEmpty())
+    }
+
+    @Test
+    fun `additional options do not apply to income`() = runTest(dispatcher) {
+        val vm = readyExpense()
+        advanceUntilIdle()
+        vm.onTaxChange("60")
+        vm.onTypeChange(TransactionType.INCOME)
+
+        assertFalse(vm.state.value.hasAdditionalOptions)
+        assertFalse(vm.state.value.optionsExceedAmount)
+        vm.save()
+        advanceUntilIdle()
+
+        assertEquals(1, ledger.recorded.size)
+        assertTrue(withDetails.isEmpty())
+    }
 
     @Test
     fun `invalid input is flagged and nothing is recorded`() = runTest(dispatcher) {

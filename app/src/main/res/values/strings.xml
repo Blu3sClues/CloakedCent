@@ -399,6 +399,10 @@
     <string name="field_item_discount">Item discount</string>
     <string name="review_items">Items</string>
     <string name="review_add_item">Add item</string>
+    <string name="additional_options">Additional Options</string>
+    <string name="field_item_price">Price</string>
+    <string name="field_store_location">Store location</string>
+    <string name="error_options_exceed_amount">Tax and items add up to more than the expense amount.</string>
     <string name="review_remove_item">Remove item</string>
     <string name="review_totals">Totals</string>
     <string name="review_items_sum">Items after discounts</string>

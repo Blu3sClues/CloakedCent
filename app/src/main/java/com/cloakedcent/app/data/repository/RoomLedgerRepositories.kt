@@ -422,9 +422,9 @@ class RoomTransactionRepository(
             )
         } else {
             requireCategory(db, edit.categoryId, current.type)
-            if (signed(current.type, edit.amount).cents != current.amountCents && db.receiptDao().hasSplits(id)) {
-                // Its receipt divides this amount across categories; changing it would unbalance them.
-                throw LedgerException.InvalidOperation("This expense is split by its receipt, so its amount cannot change")
+            if (signed(current.type, edit.amount).cents != current.amountCents && hasReceipt(db, id)) {
+                // Its receipt records this amount and divides it across categories; changing it would unbalance them.
+                throw LedgerException.InvalidOperation("This expense has a receipt, so its amount cannot change")
             }
             applyChange(
                 db,
@@ -445,6 +445,9 @@ class RoomTransactionRepository(
         erase { db -> Erasure.transaction(db, id, clock.millis()) }
     }
 
+    private suspend fun hasReceipt(db: CloakedCentDatabase, id: Long) =
+        db.receiptDao().hasSplits(id) || db.receiptDao().getByTransaction(id) != null
+
     override suspend fun confirm(id: Long, actualAmount: Money?): Boolean = write { db ->
         if (actualAmount != null) requirePositive(actualAmount)
         val current = db.transactionDao().getById(id) ?: throw LedgerException.NotFound("Transaction $id")
@@ -453,6 +456,7 @@ class RoomTransactionRepository(
         for (entry in entries) {
             var latest = entry
             if (actualAmount != null && actualAmount.cents != Math.abs(entry.amountCents)) {
+                if (hasReceipt(db, entry.id)) throw LedgerException.InvalidOperation("This expense has a receipt, so its amount cannot change")
                 val signedAmount = if (entry.amountCents < 0) -actualAmount else actualAmount
                 applyChange(db, entry, entry.copy(amountCents = signedAmount.cents), RevisionAction.UPDATE)
                 latest = db.transactionDao().getById(entry.id)!!

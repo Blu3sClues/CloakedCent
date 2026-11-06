@@ -24,6 +24,13 @@ import com.cloakedcent.app.domain.model.TransactionStatus
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
+/** A scheduled expense's items are not prices anyone has paid yet; `p` is the price observation. */
+private const val NOT_SCHEDULED = """
+    NOT EXISTS (SELECT 1 FROM receipt_items i JOIN receipts r ON r.id = i.receipt_id
+        JOIN transactions t ON t.id = r.transaction_id
+        WHERE i.id = p.receipt_item_id AND t.status = 'SCHEDULED')
+"""
+
 /**
  * A receipt with everything shown on its review screen, read in one transaction so the
  * screen never sees updated receipt fields alongside items from before an OCR run.
@@ -235,7 +242,7 @@ interface ReceiptDao {
         SELECT p.product_id, p.store_id, s.name AS store_name, p.observed_on, p.quantity_milli, p.unit,
             p.paid_cents, p.normalized_dimension, p.normalized_millicents
         FROM price_observations p JOIN stores s ON s.id = p.store_id
-        WHERE p.product_id = :productId ORDER BY p.observed_on DESC, p.id DESC
+        WHERE p.product_id = :productId AND $NOT_SCHEDULED ORDER BY p.observed_on DESC, p.id DESC
         """,
     )
     fun observePrices(productId: Long): Flow<List<PriceRow>>
@@ -245,7 +252,7 @@ interface ReceiptDao {
         SELECT p.product_id, p.store_id, s.name AS store_name, p.observed_on, p.quantity_milli, p.unit,
             p.paid_cents, p.normalized_dimension, p.normalized_millicents
         FROM price_observations p JOIN stores s ON s.id = p.store_id
-        ORDER BY p.observed_on DESC, p.id DESC
+        WHERE $NOT_SCHEDULED ORDER BY p.observed_on DESC, p.id DESC
         """,
     )
     fun observeAllPrices(): Flow<List<PriceRow>>

@@ -1035,7 +1035,7 @@ private fun ConfirmedSummary(
     val refundable = state.refunds?.items.orEmpty().associateBy { it.itemId }
     var refunding by remember { mutableStateOf<RefundableItem?>(null) }
     Text(stringResource(R.string.review_confirmed_info), color = MaterialTheme.colorScheme.primary)
-    Text(r.storeName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+    Text(r.storeName.ifBlank { stringResource(R.string.receipt_unknown_store) }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
     if (r.storeAddress.isNotBlank()) Text(r.storeAddress, style = MaterialTheme.typography.bodyMedium)
     r.purchasedOn?.let { Text(dateFormat.format(it)) }
     r.items.forEach { item ->

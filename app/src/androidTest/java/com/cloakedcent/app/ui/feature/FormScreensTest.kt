@@ -5,7 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -22,12 +24,14 @@ import com.cloakedcent.app.domain.model.TransactionType
 import com.cloakedcent.app.ui.feature.account.AccountEditorScreen
 import com.cloakedcent.app.ui.feature.account.AccountEditorState
 import com.cloakedcent.app.ui.feature.transaction.DetailState
+import com.cloakedcent.app.ui.feature.transaction.ExpenseItemInput
 import com.cloakedcent.app.ui.feature.transaction.TransactionDetailScreen
 import com.cloakedcent.app.ui.feature.transaction.TransactionEditorActions
 import com.cloakedcent.app.ui.feature.transaction.TransactionEditorScreen
 import com.cloakedcent.app.ui.feature.transaction.TransactionEditorState
 import com.cloakedcent.app.ui.theme.CloakedCentTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -67,6 +71,71 @@ class FormScreensTest {
         }
         compose.onNodeWithText("Enter an amount like 12.50").assertIsDisplayed()
         compose.onNodeWithText("Choose an account").assertIsDisplayed()
+    }
+
+    private val newExpense = TransactionEditorState(isNew = true, loading = false, type = TransactionType.EXPENSE, date = LocalDate.of(2026, 11, 15))
+
+    @Test
+    fun additionalOptionsAreRolledUpAboveSaveUntilOpened() {
+        var opened = 0
+        var state by mutableStateOf(newExpense)
+        compose.setContent {
+            CloakedCentTheme { TransactionEditorScreen(state, TransactionEditorActions(onOptionsToggle = { opened++ })) }
+        }
+        compose.onNodeWithText("Tax").assertDoesNotExist()
+        compose.onNodeWithText("Store location").assertDoesNotExist()
+        compose.onNodeWithText("Additional Options").performScrollTo().performClick()
+        assertEquals(1, opened)
+
+        state = state.copy(optionsExpanded = true)
+        compose.onNodeWithText("Tax").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Add item").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Store location").performScrollTo().assertIsDisplayed()
+        val menu = compose.onNodeWithText("Additional Options").getUnclippedBoundsInRoot().bottom
+        assertTrue(compose.onNodeWithText("Save").getUnclippedBoundsInRoot().top > menu)
+    }
+
+    @Test
+    fun additionalOptionsAreOnlyOfferedOnANewExpense() {
+        var state by mutableStateOf(newExpense.copy(type = TransactionType.INCOME))
+        compose.setContent { CloakedCentTheme { TransactionEditorScreen(state, TransactionEditorActions()) } }
+        compose.onNodeWithText("Additional Options").assertDoesNotExist()
+
+        state = newExpense.copy(type = TransactionType.TRANSFER)
+        compose.onNodeWithText("Additional Options").assertDoesNotExist()
+
+        state = newExpense.copy(isNew = false)
+        compose.onNodeWithText("Additional Options").assertDoesNotExist()
+    }
+
+    @Test
+    fun exceedingTheAmountShowsTheErrorEvenWhenRolledUp() {
+        val message = "Tax and items add up to more than the expense amount."
+        var state by mutableStateOf(newExpense.copy(amount = "50", tax = "50"))
+        compose.setContent { CloakedCentTheme { TransactionEditorScreen(state, TransactionEditorActions()) } }
+        compose.onNodeWithText(message).assertDoesNotExist()
+
+        state = state.copy(tax = "50.01")
+        compose.onNodeWithText(message).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun itemRowsCanBeAddedEditedAndRemoved() {
+        val removed = mutableListOf<Int>()
+        var added = 0
+        compose.setContent {
+            CloakedCentTheme {
+                TransactionEditorScreen(
+                    newExpense.copy(optionsExpanded = true, items = listOf(ExpenseItemInput(7, "Milk", "2"))),
+                    TransactionEditorActions(onAddItem = { added++ }, onRemoveItem = { removed += it }),
+                )
+            }
+        }
+        compose.onNodeWithText("Milk").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Add item").performScrollTo().performClick()
+        assertEquals(1, added)
+        compose.onNodeWithContentDescription("Remove item").performScrollTo().performClick()
+        assertEquals(listOf(7), removed)
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.cloakedcent.app.domain.repository
 
+import com.cloakedcent.app.domain.model.ExpenseDetails
+import com.cloakedcent.app.domain.model.NewTransaction
 import com.cloakedcent.app.domain.model.ConfirmTarget
 import com.cloakedcent.app.domain.model.DuplicateWarning
 import com.cloakedcent.app.domain.model.ExpenseMatch
@@ -43,6 +45,14 @@ interface ReceiptRepository {
 
     /** Decrypted JPEG of one page, in memory only. */
     suspend fun loadPage(imageId: Long): ByteArray
+
+    /**
+     * Records a new expense with its details as a confirmed receipt with no image, all or
+     * nothing. [storeName] names the store; without one the receipt has no store. Unlike a
+     * scanned receipt, nothing is required and the details need not add up to the amount,
+     * only not exceed it. Returns the expense id. Idempotent on the expense's request id.
+     */
+    suspend fun recordExpense(expense: NewTransaction, storeName: String, details: ExpenseDetails): Long
 
     /** Saves the user's corrections. No financial effect. */
     suspend fun saveReview(id: Long, review: ReceiptReview)

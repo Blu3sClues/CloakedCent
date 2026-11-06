@@ -16,6 +16,7 @@ import com.cloakedcent.app.data.receipt.OcrEngine
 import com.cloakedcent.app.data.receipt.ProcessedPage
 import com.cloakedcent.app.data.receipt.ReceiptImageProcessor
 import com.cloakedcent.app.data.receipt.ReceiptImageStore
+import com.cloakedcent.app.domain.model.ExpenseDetails
 import com.cloakedcent.app.domain.model.CategoryKind
 import com.cloakedcent.app.domain.model.ConfirmTarget
 import com.cloakedcent.app.domain.model.DuplicateWarning
@@ -61,9 +62,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.time.Clock
+import java.time.LocalDate
 import java.time.LocalTime
 
 private const val MATCH_WINDOW_DAYS = 7L
+private const val UNNAMED_ITEM = "Item"
 
 class RoomReceiptRepository(
     database: () -> CloakedCentDatabase,
@@ -397,23 +400,7 @@ class RoomReceiptRepository(
                     userVerified = true,
                 ),
             )
-            learnAlias(db, store.id, item.rawText.ifBlank { item.description }, product.id, now)
-            val normalized = UnitPricing.normalize(item.net, item.quantityMilli, item.unit, product.packQuantityMilli, product.packUnit)
-            dao.insertObservation(
-                PriceObservationEntity(
-                    productId = product.id,
-                    storeId = store.id,
-                    receiptItemId = itemId,
-                    observedOn = date,
-                    quantityMilli = item.quantityMilli,
-                    unit = item.unit,
-                    paidCents = item.net.cents,
-                    unitPriceCents = item.unitPrice?.cents,
-                    normalizedDimension = normalized?.dimension,
-                    normalizedMillicents = normalized?.milliCentsPerUnit,
-                    createdAt = now,
-                ),
-            )
+            recordPrice(db, store, product, item, itemId, date, now)
         }
         dao.update(
             receipt.withReview(review).copy(
@@ -431,6 +418,77 @@ class RoomReceiptRepository(
         val imageFiles = if (keepImages) emptyList() else dao.getImages(id).map { it.fileName }
         if (!keepImages) dao.deleteImages(id)
         return transactionId to imageFiles
+    }
+
+    /** A confirmed item's price, and the wording this store uses for the product. */
+    private suspend fun recordPrice(
+        db: CloakedCentDatabase,
+        store: StoreEntity,
+        product: ProductEntity,
+        item: ReceiptItemDraft,
+        itemId: Long,
+        date: LocalDate,
+        now: Long,
+    ) {
+        learnAlias(db, store.id, item.rawText.ifBlank { item.description }, product.id, now)
+        val normalized = UnitPricing.normalize(item.net, item.quantityMilli, item.unit, product.packQuantityMilli, product.packUnit)
+        db.receiptDao().insertObservation(
+            PriceObservationEntity(
+                productId = product.id,
+                storeId = store.id,
+                receiptItemId = itemId,
+                observedOn = date,
+                quantityMilli = item.quantityMilli,
+                unit = item.unit,
+                paidCents = item.net.cents,
+                unitPriceCents = item.unitPrice?.cents,
+                normalizedDimension = normalized?.dimension,
+                normalizedMillicents = normalized?.milliCentsPerUnit,
+                createdAt = now,
+            ),
+        )
+    }
+
+    override suspend fun recordExpense(expense: NewTransaction, storeName: String, details: ExpenseDetails): Long = write { db ->
+        val dao = db.receiptDao()
+        val requestId = "expense-${expense.requestId}"
+        dao.getByRequestId(requestId)?.let { return@write it.transactionId ?: throw ReceiptException.NotEditable() }
+        val itemized = details.items.sumOf { it.price.cents }
+        if (expense.type != TransactionType.EXPENSE || details.tax.cents + itemized > expense.amount.cents) {
+            throw LedgerException.InvalidOperation("Tax and items cannot exceed the expense")
+        }
+        val transactionId = transactions.record(expense)
+        val now = clock.millis()
+        val review = ReceiptReview(
+            storeName = storeName,
+            storeAddress = details.storeAddress,
+            purchasedOn = expense.occurredOn,
+            tax = details.tax,
+            total = expense.amount,
+            defaultCategoryId = expense.categoryId,
+        )
+        val store = if (storeName.isBlank()) null else resolveStore(db, review, now)
+        val receiptId = dao.insert(ReceiptEntity(requestId = requestId, status = ReceiptStatus.DRAFT, createdAt = now, updatedAt = now))
+        details.items.forEachIndexed { position, entered ->
+            val name = entered.name.trim()
+            val description = name.ifEmpty { UNNAMED_ITEM }
+            val item = ReceiptItemDraft(rawText = description, description = description, lineTotal = entered.price, categoryId = expense.categoryId)
+            // Price history needs a real product, a real price and somewhere it was paid.
+            val priced = store != null && entered.price.isPositive && TextKeys.normalize(name).isNotEmpty()
+            val product = if (priced) resolveProduct(db, item, expense.categoryId, now) else null
+            val itemId = dao.insertItem(item.toEntity(receiptId, position).copy(productId = product?.id, userVerified = true))
+            if (product != null) recordPrice(db, store!!, product, item, itemId, expense.occurredOn, now)
+        }
+        dao.update(
+            dao.getById(receiptId)!!.withReview(review).copy(
+                status = ReceiptStatus.CONFIRMED,
+                storeId = store?.id,
+                transactionId = transactionId,
+                updatedAt = now,
+                confirmedAt = now,
+            ),
+        )
+        transactionId
     }
 
     /** Links to an existing expense without ever creating another one. */
@@ -512,14 +570,14 @@ class RoomReceiptRepository(
         return store.copy(id = dao.insertStore(store))
     }
 
-    private suspend fun resolveProduct(db: CloakedCentDatabase, item: ReceiptItemDraft, categoryId: Long, now: Long): ProductEntity {
+    private suspend fun resolveProduct(db: CloakedCentDatabase, item: ReceiptItemDraft, categoryId: Long?, now: Long): ProductEntity {
         val dao = db.receiptDao()
         val key = TextKeys.descriptionKey(item.description).ifEmpty { TextKeys.normalize(item.description) }
         val suggested = item.productId?.let { dao.getProduct(it) }?.takeIf { TextKeys.descriptionKey(it.name) == key }
         val existing = suggested ?: dao.getProductByName(key)
         if (existing != null) {
             // The latest confirmed category becomes the product's default.
-            return existing.copy(defaultCategoryId = categoryId, updatedAt = now).also {
+            return existing.copy(defaultCategoryId = categoryId ?: existing.defaultCategoryId, updatedAt = now).also {
                 if (it != existing) dao.updateProduct(it)
             }
         }

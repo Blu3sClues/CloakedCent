@@ -14,6 +14,8 @@ import com.cloakedcent.app.core.money.Money
 import com.cloakedcent.app.domain.model.AccountBalance
 import com.cloakedcent.app.domain.model.Category
 import com.cloakedcent.app.domain.model.CategoryKind
+import com.cloakedcent.app.domain.model.ExpenseDetails
+import com.cloakedcent.app.domain.model.ExpenseItem
 import com.cloakedcent.app.domain.model.NewTransaction
 import com.cloakedcent.app.domain.model.NewTransfer
 import com.cloakedcent.app.domain.model.TransactionEdit
@@ -43,6 +45,9 @@ import java.util.UUID
 /** A transfer's destination account and its balance afterwards, as balances are shown elsewhere. */
 data class DestinationBalance(val accountName: String, val balance: Money)
 
+/** One optional line in an expense's Additional Options. [key] tells rows apart while editing. */
+data class ExpenseItemInput(val key: Int, val name: String = "", val price: String = "")
+
 data class TransactionEditorState(
     val isNew: Boolean,
     val loading: Boolean,
@@ -60,6 +65,10 @@ data class TransactionEditorState(
     val note: String = "",
     /** False = completed (Spent/Received/Completed by type); true = Scheduled. */
     val scheduled: Boolean = false,
+    val optionsExpanded: Boolean = false,
+    val tax: String = "",
+    val items: List<ExpenseItemInput> = emptyList(),
+    val storeLocation: String = "",
     val amountInvalid: Boolean = false,
     val accountMissing: Boolean = false,
     val toAccountMissing: Boolean = false,
@@ -92,6 +101,30 @@ data class TransactionEditorState(
 
     /** Only income and expenses carry a category and payee. */
     val hasCategory: Boolean get() = type == TransactionType.INCOME || type == TransactionType.EXPENSE
+
+    /** Additional Options belong to a new expense only. */
+    val hasAdditionalOptions: Boolean get() = isNew && type == TransactionType.EXPENSE
+
+    /** The only problem Additional Options can have. Blank fields count as nothing. */
+    val optionsExceedAmount: Boolean
+        get() {
+            if (!hasAdditionalOptions) return false
+            val limit = AmountInput.parse(amount) ?: return false
+            val entered = (items.map { it.price } + tax).map(::optionalPrice)
+            return entered.sumOf { it.cents.toBigInteger() } > limit.cents.toBigInteger()
+        }
+
+    /** What was entered in Additional Options; null if nothing was. */
+    val expenseDetails: ExpenseDetails?
+        get() {
+            if (!hasAdditionalOptions) return null
+            val entered = items
+                .map { ExpenseItem(it.name.trim(), optionalPrice(it.price)) }
+                .filter { it.name.isNotEmpty() || it.price.isPositive }
+            return ExpenseDetails(optionalPrice(tax), entered, storeLocation.trim()).takeUnless { it.isEmpty }
+        }
+
+    private fun optionalPrice(text: String): Money = AmountInput.parse(text)?.takeIf { it.isPositive } ?: Money.ZERO
 }
 
 /**
@@ -106,6 +139,7 @@ class TransactionEditorViewModel(
     private val categories: CategoryRepository,
     private val payees: PayeeRepository,
     private val transactions: TransactionRepository,
+    private val recordWithDetails: suspend (NewTransaction, String, ExpenseDetails) -> Long,
     clock: Clock = Clock.systemDefaultZone(),
 ) : ViewModel() {
 
@@ -197,6 +231,16 @@ class TransactionEditorViewModel(
     fun onPayeeChange(text: String) = _state.update { it.copy(payee = text) }
     fun onNoteChange(text: String) = _state.update { it.copy(note = text) }
     fun onScheduledChange(scheduled: Boolean) = _state.update { it.copy(scheduled = scheduled) }
+    fun onOptionsToggle() = _state.update { it.copy(optionsExpanded = !it.optionsExpanded) }
+    fun onTaxChange(text: String) = _state.update { it.copy(tax = text) }
+    fun onStoreLocationChange(text: String) = _state.update { it.copy(storeLocation = text) }
+    fun onAddItem() = _state.update { s -> s.copy(items = s.items + ExpenseItemInput((s.items.maxOfOrNull { it.key } ?: 0) + 1)) }
+    fun onRemoveItem(key: Int) = _state.update { s -> s.copy(items = s.items.filterNot { it.key == key }) }
+    fun onItemNameChange(key: Int, text: String) = updateItem(key) { it.copy(name = text) }
+    fun onItemPriceChange(key: Int, text: String) = updateItem(key) { it.copy(price = text) }
+
+    private fun updateItem(key: Int, change: (ExpenseItemInput) -> ExpenseItemInput) =
+        _state.update { s -> s.copy(items = s.items.map { if (it.key == key) change(it) else it }) }
 
     fun save() {
         val s = _state.value
@@ -207,8 +251,9 @@ class TransactionEditorViewModel(
             accountMissing = s.accountId == null,
             toAccountMissing = s.isTransfer && s.toAccountId == null,
         )
-        if (invalid.amountInvalid || invalid.accountMissing || invalid.toAccountMissing) {
-            _state.value = invalid
+        if (invalid.amountInvalid || invalid.accountMissing || invalid.toAccountMissing || invalid.optionsExceedAmount) {
+            // Opened so the problem is visible even if the menu was rolled up.
+            _state.value = invalid.copy(optionsExpanded = invalid.optionsExpanded || invalid.optionsExceedAmount)
             return
         }
         _state.update { it.copy(saving = true, error = null) }
@@ -224,9 +269,11 @@ class TransactionEditorViewModel(
                     s.isTransfer -> transactions.recordTransfer(
                         NewTransfer(requestId, s.accountId!!, s.toAccountId!!, amount!!, s.date, s.scheduled, note),
                     )
-                    else -> transactions.record(
-                        NewTransaction(requestId, s.accountId!!, s.type, amount!!, s.date, s.scheduled, s.categoryId, payeeId, note),
-                    )
+                    else -> {
+                        val entry = NewTransaction(requestId, s.accountId!!, s.type, amount!!, s.date, s.scheduled, s.categoryId, payeeId, note)
+                        val details = s.expenseDetails
+                        if (details != null) recordWithDetails(entry, s.payee.trim(), details) else transactions.record(entry)
+                    }
                 }
                 _state.update { it.copy(saving = false, finished = true) }
             } catch (e: CancellationException) {
@@ -254,6 +301,7 @@ class TransactionEditorViewModel(
                     categories = container.categoryRepository,
                     payees = container.payeeRepository,
                     transactions = container.transactionRepository,
+                    recordWithDetails = container.receiptRepository::recordExpense,
                 )
             }
         }
