@@ -147,6 +147,7 @@ fun CloakedCentNavHost() {
                 onLocation = { id, period -> nav.navigate(Routes.analysisLocation(id, period)) },
                 onProduct = { id, period -> nav.navigate(Routes.analysisProduct(id, period)) },
                 onEditProduct = { nav.navigate(Routes.product(it)) },
+                onTransaction = { nav.navigate(Routes.transaction(it)) },
             )
             val periodArg = navArgument(ARG_ANALYSIS_PERIOD) { type = NavType.StringType; nullable = true; defaultValue = null }
             val idArg = navArgument(ARG_ANALYSIS_ID) { type = NavType.LongType }

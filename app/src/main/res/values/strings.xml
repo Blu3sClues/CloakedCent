@@ -485,6 +485,7 @@
     <string name="analysis_top_categories">Top categories</string>
     <string name="analysis_top_stores">Top stores</string>
     <string name="analysis_top_products">Top products</string>
+    <string name="analysis_transactions">Transactions</string>
     <string name="analysis_empty_title">No spending in this period</string>
     <string name="analysis_empty_body">Completed expenses appear here. Scheduled, deleted, income, transfer and balance-adjustment entries are not counted.</string>
     <string name="analysis_receipts_empty">Store and product analysis uses confirmed receipts. Scan a receipt to see it here.</string>

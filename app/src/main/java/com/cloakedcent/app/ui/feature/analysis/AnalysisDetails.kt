@@ -1,5 +1,6 @@
 package com.cloakedcent.app.ui.feature.analysis
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,9 +16,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,6 +36,7 @@ import com.cloakedcent.app.domain.model.AnalysisPeriod
 import com.cloakedcent.app.domain.model.AnalysisPeriods
 import com.cloakedcent.app.domain.model.BrandAnalysis
 import com.cloakedcent.app.domain.model.CategoryAnalysis
+import com.cloakedcent.app.domain.model.CategoryTransaction
 import com.cloakedcent.app.domain.model.Comparison
 import com.cloakedcent.app.domain.model.LocationAnalysis
 import com.cloakedcent.app.domain.model.LocationPriceComparison
@@ -139,6 +144,42 @@ fun CategoryAnalysisRoute(
             }
         }
         productsSection(analysis.topProducts, period, nav)
+        if (analysis.transactions.isNotEmpty()) {
+            item { CategoryTransactionsCard(analysis.transactions, analysis.category.name, nav.onTransaction) }
+        }
+    }
+}
+
+/** Each expense's name, amount and date, largest first; tapping one opens it. */
+@Composable
+internal fun CategoryTransactionsCard(transactions: List<CategoryTransaction>, fallbackName: String, onOpen: (Long) -> Unit) {
+    SectionCard(stringResource(R.string.analysis_transactions)) {
+        transactions.forEach { transaction ->
+            Row(
+                Modifier.fillMaxWidth().clickable { onOpen(transaction.id) }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        transaction.name ?: fallbackName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        transaction.date.format(analysisDate),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    AmountInput.format(transaction.amount),
+                    Modifier.padding(start = 16.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
     }
 }
 

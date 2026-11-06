@@ -16,6 +16,7 @@ import com.cloakedcent.app.domain.model.DatePreset
 import com.cloakedcent.app.domain.model.DateRange
 import com.cloakedcent.app.domain.model.Dimension
 import com.cloakedcent.app.domain.model.ImportOutcome
+import com.cloakedcent.app.domain.model.MAX_CATEGORY_TRANSACTIONS
 import com.cloakedcent.app.domain.model.NewAdjustment
 import com.cloakedcent.app.domain.model.NewTransaction
 import com.cloakedcent.app.domain.model.NewTransfer
@@ -41,7 +42,9 @@ import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.SecureRandom
+import java.time.Clock
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.random.Random
 
 @RunWith(AndroidJUnit4::class)
@@ -189,6 +192,82 @@ class AnalysisRepositoryTest {
         assertEquals(3_075L, detail.trend.sumOf { it.amount.cents })
         assertEquals(listOf("Milk 1L", "Bread"), detail.topProducts.map { it.name })
         assertNull(analysis.observeCategory(999, november).first())
+    }
+
+    private suspend fun transactions(category: Long) = analysis.observeCategory(category, november).first()!!.transactions
+
+    @Test
+    fun categoryTransactionsAreLargestFirstThenNewest() = runTest {
+        val small = expense("small", 100, day(20), groceries)
+        val olderTie = expense("older", 500, day(3), groceries)
+        val newerTie = expense("newer", 500, day(9), groceries)
+        val large = expense("large", 900, day(1), groceries)
+
+        assertEquals(listOf(large, newerTie, olderTie, small), transactions(groceries).map { it.id })
+        assertEquals(listOf(900L, 500L, 500L, 100L), transactions(groceries).map { it.amount.cents })
+        assertEquals(day(9), transactions(groceries)[1].date)
+    }
+
+    @Test
+    fun categoryTransactionsCoverOnlyConfirmedSpendingInThePeriod() = runTest {
+        val kept = expense("kept", 100, day(5), groceries)
+        expense("scheduled", 9_000, day(6), groceries, scheduled = true)
+        expense("before", 9_000, day(31, month = 10), groceries)
+        expense("other", 9_000, day(6), housing)
+        t.ledger.delete(expense("deleted", 9_000, day(7), groceries))
+        t.ledger.record(NewTransaction("income", checking, TransactionType.INCOME, Money(9_000), day(8), categoryId = otherIncome))
+        t.ledger.recordTransfer(NewTransfer("move", checking, savings, Money(9_000), day(9), false))
+        t.ledger.adjustBalance(NewAdjustment("adjust", checking, Money(-9_000), AdjustmentKind.EXPENSE, day(10)))
+
+        assertEquals(listOf(kept), transactions(groceries).map { it.id })
+    }
+
+    @Test
+    fun categoryTransactionsStopAtThirtyKeepingTheLargest() = runTest {
+        repeat(32) { expense("e$it", 100L + it, day(1 + it % 28), groceries) }
+
+        val amounts = transactions(groceries).map { it.amount.cents }
+        assertEquals(MAX_CATEGORY_TRANSACTIONS, amounts.size)
+        assertEquals(131L, amounts.first())
+        assertEquals(102L, amounts.last())
+    }
+
+    @Test
+    fun aParentCategoryListsItsSubcategories() = runTest {
+        val own = expense("own", 300, day(2), food)
+        val sub = expense("sub", 200, day(2), groceries)
+        val deeper = expense("sub2", 100, day(2), dining)
+
+        assertEquals(listOf(own, sub, deeper), transactions(food).map { it.id })
+        assertEquals(listOf(sub), transactions(groceries).map { it.id })
+    }
+
+    @Test
+    fun aSplitExpenseShowsOnlyThePartInTheCategory() = runTest {
+        val id = receipt(1, "Mart", "1 Main St", day(4), listOf(item("Milk", 300, groceries), item("Lunch", 200, dining), item("Rent", 500, housing)))
+
+        assertEquals(listOf(id to 300L), transactions(groceries).map { it.id to it.amount.cents })
+        assertEquals(listOf(id to 500L), transactions(housing).map { it.id to it.amount.cents })
+        // Two parts under the same parent are one transaction, added together.
+        assertEquals(listOf(id to 500L), transactions(food).map { it.id to it.amount.cents })
+    }
+
+    @Test
+    fun categoryTransactionsAreNamedAfterThePayeeThenTheCategory() = runTest {
+        val payee = t.payees.getOrCreate("Fresh Market")
+        t.ledger.record(NewTransaction("paid", checking, TransactionType.EXPENSE, Money(200), day(2), categoryId = groceries, payeeId = payee))
+        expense("unnamed", 100, day(2), groceries)
+
+        assertEquals(listOf("Fresh Market", "Groceries"), transactions(groceries).map { it.name })
+    }
+
+    @Test
+    fun refundsAreLeftOutAndTheExpenseKeepsItsAmount() = runTest {
+        val id = expense("bought", 1_000, day(2), groceries)
+        val clock = Clock.fixed(today.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC)
+        RoomRefundRepository({ t.db }, clock).refundTransaction(id, Money(400), day(3), "refund")
+
+        assertEquals(listOf(id to 1_000L), transactions(groceries).map { it.id to it.amount.cents })
     }
 
     @Test

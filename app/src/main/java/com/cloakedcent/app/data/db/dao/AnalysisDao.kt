@@ -89,6 +89,9 @@ data class ProductRefundRow(@ColumnInfo(name = "product_id") val productId: Long
 
 data class DailySpendRow(val day: LocalDate, val cents: Long)
 
+/** One expense's spending within some categories; [name] is null when it has neither payee nor category. */
+data class CategoryTransactionRow(val id: Long, val name: String?, val day: LocalDate, val cents: Long)
+
 data class CategorySpendRow(@ColumnInfo(name = "category_id") val categoryId: Long?, val cents: Long)
 
 data class LocationSpendRow(
@@ -154,6 +157,33 @@ interface AnalysisDao {
 
     @Query("SELECT day, SUM(cents) AS cents FROM ($CATEGORY_PARTS) WHERE category_id IN (:categoryIds) GROUP BY day")
     fun observeCategoryDaily(from: LocalDate, to: LocalDate, categoryIds: List<Long>): Flow<List<DailySpendRow>>
+
+    /**
+     * The largest expenses in some categories. A split expense counts only its parts in these
+     * categories, as the totals do, so it appears once with those parts added together.
+     */
+    @Query(
+        """
+        SELECT t.id AS id, COALESCE(p.name, c.name) AS name, t.occurred_on AS day, SUM(parts.cents) AS cents
+        FROM (
+            SELECT transaction_id AS id, amount_cents AS cents FROM transaction_splits WHERE category_id IN (:categoryIds)
+            UNION ALL
+            SELECT id, cents FROM (
+                SELECT e.id AS id, -e.amount_cents - (SELECT COALESCE(SUM(amount_cents), 0) FROM transaction_splits
+                    WHERE transaction_id = e.id) AS cents
+                FROM transactions e WHERE e.category_id IN (:categoryIds)
+            ) WHERE cents > 0
+        ) parts
+        JOIN transactions t ON t.id = parts.id
+        LEFT JOIN payees p ON p.id = t.payee_id
+        LEFT JOIN categories c ON c.id = t.category_id
+        WHERE $SPENDING
+        GROUP BY t.id
+        ORDER BY cents DESC, day DESC, t.id DESC
+        LIMIT :limit
+        """,
+    )
+    fun observeCategoryTransactions(from: LocalDate, to: LocalDate, categoryIds: List<Long>, limit: Int): Flow<List<CategoryTransactionRow>>
 
     @Query(
         """

@@ -405,6 +405,9 @@ so every balance comes from a single source and nothing can be double counted.
   products. Periods: 7, 30 or 90 days; this or last month; this or last year; all
   time; or a custom range. Each period is compared with the equally long period
   before it.
+- **Category transactions.** A category's page lists up to 30 of its expenses in the period,
+  subcategories included: largest first, then newest. A split expense shows only its part in
+  the category. Refunds are not listed, so a category with refunds can list more than its total.
 - **What counts as spending.** Completed, non-deleted expenses that are not balance
   adjustments. Scheduled, deleted, income (including refunds recorded as income),
   transfer and adjustment entries are excluded.

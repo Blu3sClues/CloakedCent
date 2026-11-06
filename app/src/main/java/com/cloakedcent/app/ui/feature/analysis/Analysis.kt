@@ -108,6 +108,7 @@ class AnalysisNavigation(
     val onLocation: (Long, AnalysisPeriod) -> Unit,
     val onProduct: (Long, AnalysisPeriod) -> Unit,
     val onEditProduct: (Long) -> Unit,
+    val onTransaction: (Long) -> Unit,
 )
 
 @Composable

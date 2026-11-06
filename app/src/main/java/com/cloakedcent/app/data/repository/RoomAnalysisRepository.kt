@@ -16,6 +16,8 @@ import com.cloakedcent.app.domain.model.Category
 import com.cloakedcent.app.domain.model.CategoryAnalysis
 import com.cloakedcent.app.domain.model.CategoryRollup
 import com.cloakedcent.app.domain.model.CategorySpend
+import com.cloakedcent.app.domain.model.CategoryTransaction
+import com.cloakedcent.app.domain.model.MAX_CATEGORY_TRANSACTIONS
 import com.cloakedcent.app.domain.model.Comparison
 import com.cloakedcent.app.domain.model.DateRange
 import com.cloakedcent.app.domain.model.LocationAnalysis
@@ -159,7 +161,8 @@ class RoomAnalysisRepository(
                 observeCategories(period),
                 trend(r, dao { observeCategoryDaily(r.start, r.endInclusive, subtree) }),
                 products(r, categoryIds = subtree),
-            ) { rows, trend, productRows ->
+                dao { observeCategoryTransactions(r.start, r.endInclusive, subtree, MAX_CATEGORY_TRANSACTIONS) },
+            ) { rows, trend, productRows, transactionRows ->
                 val row = rows.firstOrNull { it.categoryId == categoryId }
                     ?: CategorySpend(categoryId, category.name, category.parentId, 0, Money.ZERO, Money.ZERO, period.previous?.let { Money.ZERO })
                 CategoryAnalysis(
@@ -168,6 +171,7 @@ class RoomAnalysisRepository(
                     subcategories = rows.filter { it.parentId == categoryId && it.categoryId != null },
                     trend = trend,
                     topProducts = productRows.take(TOP * 2),
+                    transactions = transactionRows.map { CategoryTransaction(it.id, it.name, Money(it.cents), it.day) },
                 )
             }
         }

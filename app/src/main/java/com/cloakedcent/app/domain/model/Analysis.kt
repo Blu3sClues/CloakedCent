@@ -352,7 +352,14 @@ data class CategoryAnalysis(
     val subcategories: List<CategorySpend>,
     val trend: List<TrendPoint>,
     val topProducts: List<ProductSpend>,
+    /** Largest first, then newest first; at most [MAX_CATEGORY_TRANSACTIONS]. */
+    val transactions: List<CategoryTransaction> = emptyList(),
 )
+
+const val MAX_CATEGORY_TRANSACTIONS = 30
+
+/** An expense in an analysed category. [amount] is the part in that category; [name] is null when it has no payee or category of its own. */
+data class CategoryTransaction(val id: Long, val name: String?, val amount: Money, val date: LocalDate)
 
 /** A product bought at several locations, with each location's latest unit price. */
 data class LocationPriceComparison(val productId: Long, val productName: String, val prices: List<Pair<LocationSpend, NormalizedPrice>>)
